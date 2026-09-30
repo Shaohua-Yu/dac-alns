@@ -1,68 +1,140 @@
 # -*- coding: utf-8 -*-
-"""
-DAC-ALNS for VRPTW (Duel-Actor + unified Critic)
-------------------------------------------------
-• 一体化可运行脚本：基于你提供的 VRPTW ALNS 评价函数/时间窗可行性与 Duel_AC(CVRP) 的智能自适应逻辑改写。
-• 关键点：
-  - 仍使用 VRPTW 的时间窗可行性拆分（JIT DP + 时刻表），保证修复后解可评估；
-  - Duel-AC 两阶段（破坏/修复）各有 Actor，共享 GNN 编码器与 Critic；
-  - 神经网络结点特征显式加入时间窗影响：ready/due/service、窗宽、从车场出发的“最早到达等待”“到期紧迫度”等；
-  - 图包含静态基边(kNN 或全图) + 当前解路径动态边；
-  - 破坏后的部分解作为“中间状态”，采取双阶段 TD 更新。
+# DAC-ALNS-VRPTW 在线更新版
+# 23维动态节点特征、双阶段 Actor、单 Critic，支持随机初始化或预训练模型热启动后在线更新。
 
-使用示例：
-    python DAC_ALNS_VRPTW.py ./CAPP/pro_data/TW/C101.csv ./results/C101_run1.json --knn_k 8 --weight_mode inv --eps 0.1
-
-依赖：numpy, torch, torch_geometric, matplotlib, numba(可选), xlsxwriter(仅用于输出xlsx，可省略)。
-"""
-
-import os, csv, math, time, json, copy, random, argparse
+import os
+import csv
+import math
+import time
+import json
+import copy
+import random
+import argparse
 from pathlib import Path
 
+from vrptw_operators import (
+    DAC_DESTROY_FUNCS as DESTROY_FUNCS,
+    DAC_REPAIR_FUNCS as REPAIR_FUNCS,
+)
+
 import numpy as np
-
-# ----- 可选：Numba 加速 -----
-try:
-    from numba import njit
-    _NUMBA_AVAILABLE = True
-except Exception:
-    _NUMBA_AVAILABLE = False
-    def njit(*args, **kwargs):
-        def _wrap(fn):
-            return fn
-        return _wrap
-
-# ----- 可选：绘图后端（无显示环境兼容） -----
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-
-# ----- 深度学习组件 -----
 import torch
 import torch.nn.functional as F
-from torch_geometric.data import Data
-from torch_geometric.nn import GCNConv
+from torch_geometric.data import Data, Batch
+from torch_geometric.nn import GCNConv, global_add_pool, global_max_pool
+from torch_geometric.utils import softmax as pyg_softmax
 
-torch.set_num_threads(1)
+import matplotlib
+matplotlib.use("Agg")  # 兼容无显示环境
+import matplotlib.pyplot as plt
 
-def set_seed(seed:int=0):
-    random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
+torch.set_num_threads(1)  # 限制 PyTorch 在 CPU 上使用的线程数
+
+# ---------------------- 设备/随机种子 ---------------------- #
+def set_seed(seed: int = 0):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-# ==============================
-# 基础数据结构（沿用 VRPTW 思路）
-# ==============================
+NODE_FEATURE_NAMES = (
+    "x_norm",
+    "y_norm",
+    "demand_ratio",
+    "depot_flag",
+    "served_flag",
+    "route_load_ratio",
+    "route_position_ratio",
+    "predecessor_distance",
+    "successor_distance",
+    "removal_saving",
+    "route_distance_ratio",
+    "route_customer_ratio",
+    "ready_global",
+    "due_global",
+    "window_global",
+    "service_local",
+    "direct_wait_local",
+    "direct_slack_local",
+    "service_start_global",
+    "current_wait_local",
+    "local_time_pressure",
+    "downstream_pressure",
+    "route_finish_global",
+)
+NODE_FEATURE_DIM = len(NODE_FEATURE_NAMES)
+FEATURE_DEPOT_FLAG = NODE_FEATURE_NAMES.index("depot_flag")
+FEATURE_SERVED_FLAG = NODE_FEATURE_NAMES.index("served_flag")
+FEATURE_READY_GLOBAL = NODE_FEATURE_NAMES.index("ready_global")
+FEATURE_DIRECT_SLACK_LOCAL = NODE_FEATURE_NAMES.index("direct_slack_local")
+FEATURE_CURRENT_WAIT_LOCAL = NODE_FEATURE_NAMES.index("current_wait_local")
+FEATURE_LOCAL_TIME_PRESSURE = NODE_FEATURE_NAMES.index("local_time_pressure")
+FEATURE_DOWNSTREAM_PRESSURE = NODE_FEATURE_NAMES.index("downstream_pressure")
+GLOBAL_TIME_STATE_DIM = 5
+CHECKPOINT_ARCHITECTURE = "dac-alns-vrptw-23d-v1"
+
+# ---------------------- 结果追加与保存（文件锁并发安全版本） ---------------------- #
+def safe_append_to_json(file_path, problem_name, obj, timestamp):
+    file_path = str(file_path)
+    lock_file = file_path + '.lock'
+    while True:
+        try:
+            fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+            os.close(fd)
+            break
+        except FileExistsError:
+            try:
+                if time.time() - os.path.getmtime(lock_file) > 10:
+                    os.remove(lock_file)
+            except OSError:
+                pass
+            time.sleep(random.uniform(0.05, 0.2))
+        except OSError:
+            time.sleep(random.uniform(0.05, 0.2))
+    try:
+        data = {}
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read().strip()
+                    if content:
+                        data = json.loads(content)
+            except Exception:
+                pass
+        problem_data = data.setdefault(problem_name, {"objectives": [], "times": []})
+        problem_data["objectives"].append(obj)
+        problem_data["times"].append(timestamp)
+        temp_file = file_path + '.tmp'
+        with open(temp_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(temp_file, file_path)
+    finally:
+        if os.path.exists(lock_file):
+            try:
+                os.remove(lock_file)
+            except OSError:
+                pass
+
+def save_to_csv(file_path, record_dict):
+    file_exists = os.path.isfile(file_path)
+    with open(file_path, mode='a', newline='', encoding='utf-8-sig') as f:
+        writer = csv.DictWriter(f, fieldnames=record_dict.keys())
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(record_dict)
+
+# ---------------------- 基础数据结构 ---------------------- #
 class Sol:
     def __init__(self):
+        self.node_no_seq = None
         self.obj = None
-        self.node_no_seq = []     # 仅客户 id 的序列
-        self.route_list = []      # 含 depot 的路径列表 [[0, a, b, 0], ...]
-        self.timetable_list = []  # 与上面一一对应
-        self.route_distance = []  # 每条路线距离
+        self.route_list = None
+        self.route_distance = None
+        self.timetable_list = None
 
 class Node:
     def __init__(self):
@@ -73,782 +145,2022 @@ class Node:
         self.start_time = 0.0
         self.end_time = 1440.0
         self.service_time = 0.0
-
-class Depot:
-    def __init__(self):
-        self.id = 0
-        self.x_coord = 0.0
-        self.y_coord = 0.0
-        self.start_time = 0.0
-        self.end_time = 1440.0
-        self.v_speed = 1.0
-        self.v_cap = 80.0
+        self.original_id = 0
 
 class Model:
     def __init__(self):
-        # 问题数据
-        self.depot: Depot = None
-        self.demand_dict = {}         # id->Node（含 depot.id）
-        self.demand_id_list = []      # 仅客户 id（不含 depot）
+        self.best_sol = None
+        self.node_id_list = []  # 不含depot
+        self.demand_dict = {}  # id->Node（含depot）
+        self.depot = None
         self.number_of_demands = 0
-
-        # 距离/时间矩阵（dict/ndarray 双轨，便于复用）
+        self.vehicle_cap = 100
+        self.vehicle_speed = 1.0
+        self.depot_start_time = 0.0
+        self.depot_end_time = 1440.0
         self.distance_matrix = {}
         self.time_matrix = {}
-        # 数组版缓存
-        self._id_list = None
-        self._id_to_idx = None
-        self._idx_to_id = None
-        self._x = None; self._y = None
-        self._demand_arr = None
-        self._start_arr = None
-        self._end_arr = None
-        self._service_arr = None
-        self._dist_mat_arr = None
-        self._time_mat_arr = None
+        self.distance_matrix_dict = {}
+        self.demands_arr = None
+        self.start_arr = None
+        self.end_arr = None
+        self.service_arr = None
+        self.similarity_matrix = None  # 静态相似度矩阵
 
-        # 进化参数 & 统计
-        self.best_sol: Sol = None
-        self.rand_d_max = 0.4; self.rand_d_min = 0.1
-        self.worst_d_min = 5;   self.worst_d_max = 20
+        # 算子控制
+        self.rand_d_max = 0.25
+        self.rand_d_min = 0.1
+        self.worst_d_min = 5
+        self.worst_d_max = 20
         self.regret_n = 2
-        self.r1, self.r2, self.r3 = 20, 10, -0.1
-        self.rho = 0.6
-        self.T0 = 50.0; self.phi = 0.995
-        # Duel-AC 奖励超参
-        self.alpha1, self.alpha2 = 0.0, 1.0
-        self.beta, self.delta = 1.0, 0.1
-        # 计数
-        self.d_select = np.zeros(2)
-        self.r_select = np.zeros(3)
+        self.T0 = 50.0
+        self.phi = 0.995
 
-# ==============================
-# 数据读取 & 矩阵
-# ==============================
+        # 统计量
+        self.d_select = np.zeros(5)
+        self.r_select = np.zeros(5)
 
-def _first_not_empty(row, keys, default=None):
-    for k in keys:
-        if k in row and str(row[k]).strip() != "":
-            return row[k]
-    return default
+# ---------------------- 读取/距离/DP 分裂 ---------------------- #
+def readCsvFile(demand_file, model: Model):
+    def value(row, names, default):
+        for name in names:
+            if name in row and str(row[name]).strip() != '':
+                return float(row[name])
+        return float(default)
 
+    with open(demand_file, 'r', newline='', encoding='utf-8-sig') as f:
+        rows = list(csv.DictReader(f))
 
-def read_single_csv(instance_file: str, model: Model):
-    depot = Depot()
-    with open(instance_file, 'r', newline='') as f:
-        reader = csv.DictReader(f)
-        for line_no, row in enumerate(reader, start=1):
-            if 'id' not in row or 'x_coord' not in row or 'y_coord' not in row:
-                raise ValueError(f"CSV缺少必要列(id/x_coord/y_coord)，行{line_no}")
-            rid = int(float(row['id']))
-            is_depot = str(row.get('is_depot', '')).strip().lower() in ('1','true','yes','y')
-            if is_depot or rid == 0:
-                depot.id = rid
-                depot.x_coord = float(row['x_coord'])
-                depot.y_coord = float(row['y_coord'])
-                depot.start_time = float(_first_not_empty(row, ['depot_start_time','ready_time','start_time'], 0))
-                depot.end_time   = float(_first_not_empty(row, ['depot_end_time','due_time','end_time'], 1440))
-                v_speed = _first_not_empty(row, ['v_speed'], None)
-                v_cap   = _first_not_empty(row, ['v_cap'], None)
-                depot.v_speed = float(v_speed) if v_speed is not None and float(v_speed) > 0 else 1.0
-                depot.v_cap   = float(v_cap) if v_cap is not None else 80.0
-                model.depot = depot
-                model.demand_dict[depot.id] = depot
-            else:
-                node = Node()
-                node.id = rid
-                node.x_coord = float(row['x_coord'])
-                node.y_coord = float(row['y_coord'])
-                node.demand = float(_first_not_empty(row, ['demand'], 0))
-                node.start_time = float(_first_not_empty(row, ['ready_time','start_time'], 0))
-                node.end_time = float(_first_not_empty(row, ['due_time','end_time'], 1440))
-                node.service_time = float(_first_not_empty(row, ['service_time'], 0))
-                model.demand_dict[node.id] = node
-                model.demand_id_list.append(node.id)
-    if model.depot is None:
-        raise ValueError("未在CSV中找到车场（id=0 或 is_depot=True 的行）。")
-    if len(model.demand_id_list) == 0:
-        raise ValueError("CSV中未发现任何客户行（id>=1）。")
-    model.number_of_demands = len(model.demand_id_list)
+    if not rows:
+        raise ValueError(f"CSV 文件为空: {demand_file}")
+    required = {'id', 'x_coord', 'y_coord'}
+    if not required.issubset(rows[0].keys()):
+        raise ValueError("CSV 缺少必要列: id, x_coord, y_coord")
 
+    depot_candidates = []
+    for row in rows:
+        raw_id = int(float(row['id']))
+        is_depot = str(row.get('is_depot', '')).strip().lower() in {'1', 'true', 'yes', 'y'}
+        if is_depot or raw_id == 0:
+            depot_candidates.append(row)
+    if not depot_candidates:
+        depot_candidates = [row for row in rows if value(row, ('demand',), 0.0) == 0.0]
+    if len(depot_candidates) != 1:
+        raise ValueError("CSV 必须且只能包含一个车场（id=0 或 is_depot=true）")
 
-def calDistanceTimeMatrix(model: Model):
-    id_list = [model.depot.id] + list(model.demand_id_list)
-    M = len(id_list)
+    depot_row = depot_candidates[0]
+    customer_rows = [row for row in rows if row is not depot_row]
+    ordered_rows = [depot_row] + customer_rows
 
-    id_to_idx = {nid: i for i, nid in enumerate(id_list)}
-    idx_to_id = np.array(id_list, dtype=np.int64)
+    model.vehicle_cap = value(depot_row, ('v_cap', 'capacity'), value(rows[0], ('v_cap', 'capacity'), 100.0))
+    model.vehicle_speed = max(value(depot_row, ('v_speed', 'speed'), 1.0), 1e-9)
+    model.depot_start_time = value(depot_row, ('depot_start_time', 'ready_time', 'start_time'), 0.0)
+    model.depot_end_time = value(
+        depot_row, ('depot_end_time', 'due_time', 'due_date', 'end_time'), 1440.0)
 
-    x = np.zeros(M); y = np.zeros(M)
-    demand_arr = np.zeros(M)
-    start_arr = np.zeros(M); end_arr = np.zeros(M)
-    service_arr = np.zeros(M)
+    for internal_id, row in enumerate(ordered_rows):
+        node = Node()
+        node.id = internal_id
+        node.original_id = int(float(row['id']))
+        node.x_coord = float(row['x_coord'])
+        node.y_coord = float(row['y_coord'])
+        if internal_id == 0:
+            node.demand = 0.0
+            node.start_time = model.depot_start_time
+            node.end_time = model.depot_end_time
+            node.service_time = 0.0
+            model.depot = node
+        else:
+            node.demand = value(row, ('demand',), 0.0)
+            node.start_time = value(row, ('ready_time', 'start_time'), 0.0)
+            node.end_time = value(
+                row, ('due_time', 'due_date', 'end_time'), model.depot_end_time)
+            node.service_time = value(row, ('service_time', 'service'), 0.0)
+            model.node_id_list.append(node.id)
+        model.demand_dict[node.id] = node
 
-    x[0] = model.depot.x_coord; y[0] = model.depot.y_coord
-    start_arr[0] = model.depot.start_time; end_arr[0] = model.depot.end_time
-    demand_arr[0] = 0.0; service_arr[0] = 0.0
+    model.number_of_demands = len(model.node_id_list)
 
-    for k, nid in enumerate(model.demand_id_list, start=1):
-        n = model.demand_dict[nid]
-        x[k] = n.x_coord; y[k] = n.y_coord
-        demand_arr[k] = n.demand
-        start_arr[k] = n.start_time; end_arr[k] = n.end_time
-        service_arr[k] = n.service_time
+def calDistanceMatrix(model):
+    ids = [model.depot.id] + model.node_id_list
+    coords = np.array([[model.demand_dict[i].x_coord,
+                        model.demand_dict[i].y_coord] for i in ids],
+                      dtype=np.float32)
 
-    dx = x[:, None] - x[None, :]
-    dy = y[:, None] - y[None, :]
-    dist_mat = np.hypot(dx, dy)
-    v = max(float(model.depot.v_speed), 1e-9)
-    time_mat = dist_mat / v
+    diff = coords[:, None, :] - coords[None, :, :]
+    dist_mat = np.sqrt((diff ** 2).sum(-1, dtype=np.float32))
 
-    # 旧接口（dict）
-    model.distance_matrix.clear(); model.time_matrix.clear()
-    for i in range(M):
-        idi = id_list[i]
-        for j in range(M):
-            idj = id_list[j]
-            model.distance_matrix[(idi, idj)] = float(dist_mat[i, j])
-            model.time_matrix[(idi, idj)] = float(time_mat[i, j])
+    model.distance_matrix = dist_mat
+    model.time_matrix = dist_mat / max(float(model.vehicle_speed), 1e-9)
+    model.id2idx = {id_: idx for idx, id_ in enumerate(ids)}
+    model.idx2id = ids
 
-    # 数组缓存
-    model._id_list = id_list
-    model._id_to_idx = id_to_idx
-    model._idx_to_id = idx_to_id
-    model._x = x; model._y = y
-    model._demand_arr = demand_arr
-    model._start_arr = start_arr; model._end_arr = end_arr
-    model._service_arr = service_arr
-    model._dist_mat_arr = dist_mat
-    model._time_mat_arr = time_mat
+    for i, id_i in enumerate(ids):
+        for j, id_j in enumerate(ids):
+            model.distance_matrix_dict[(id_i, id_j)] = dist_mat[i, j]
 
+    # 初始化需求快速查询
+    max_id = max(model.demand_dict.keys())
+    model.demands_arr = np.zeros(max_id + 1, dtype=np.float32)
+    model.start_arr = np.zeros(max_id + 1, dtype=np.float32)
+    model.end_arr = np.zeros(max_id + 1, dtype=np.float32)
+    model.service_arr = np.zeros(max_id + 1, dtype=np.float32)
+    for nid, node in model.demand_dict.items():
+        model.demands_arr[nid] = node.demand
+        model.start_arr[nid] = node.start_time
+        model.end_arr[nid] = node.end_time
+        model.service_arr[nid] = node.service_time
 
-def validate_single_customer_feasible(model: Model):
+    # 预计算 Shaw 相似度矩阵
+    n = len(ids)
+    sim_mat = np.zeros((n, n), dtype=np.float32)
+    max_d = np.max(dist_mat) + 1e-9
+    max_q = np.max(model.demands_arr) + 1e-9
+    horizon = max(float(model.depot_end_time - model.depot_start_time), 1e-9)
+    for u in range(n):
+        for v in range(n):
+            dist_score = dist_mat[u, v] / max_d
+            demand_score = abs(model.demands_arr[u] - model.demands_arr[v]) / max_q
+            midpoint_u = 0.5 * (model.start_arr[u] + model.end_arr[u])
+            midpoint_v = 0.5 * (model.start_arr[v] + model.end_arr[v])
+            midpoint_score = abs(midpoint_u - midpoint_v) / horizon
+            intersection = max(
+                0.0,
+                min(model.end_arr[u], model.end_arr[v])
+                - max(model.start_arr[u], model.start_arr[v]),
+            )
+            union = max(
+                model.end_arr[u], model.end_arr[v]
+            ) - min(model.start_arr[u], model.start_arr[v])
+            overlap_penalty = 1.0 - intersection / max(float(union), 1e-9)
+            sim_mat[u, v] = (
+                0.45 * dist_score
+                + 0.15 * demand_score
+                + 0.20 * midpoint_score
+                + 0.20 * overlap_penalty
+            )
+    model.similarity_matrix = sim_mat
+
     infeasible = []
-    for nid in model.demand_id_list:
-        n = model.demand_dict[nid]
-        t_go = model.time_matrix[(model.depot.id, nid)]
-        t_back = model.time_matrix[(nid, model.depot.id)]
-        arrival = max(model.depot.start_time + t_go, n.start_time)
-        depart = arrival + n.service_time
-        ok = (
-            n.demand <= model.depot.v_cap and
-            arrival <= n.end_time and
-            depart + t_back <= model.depot.end_time
-        )
-        if not ok:
-            infeasible.append(nid)
+    for customer_id in model.node_id_list:
+        route = [model.depot.id, customer_id, model.depot.id]
+        feasible, _, _ = calRouteSchedule(route, model)
+        if not feasible:
+            infeasible.append(model.demand_dict[customer_id].original_id)
     if infeasible:
-        raise ValueError("以下客户单独访问也不可行（时间窗/容量/速度设置不一致）：" + str(infeasible))
+        raise ValueError(f"以下客户单独成路线仍不可行: {infeasible}")
 
-# ==============================
-# VRPTW 时刻表/拆分（JIT）
-# ==============================
-@njit(cache=True, fastmath=True)
-def _jit_split_routes_pred(seq_idx,
-                           demand, start_t, end_t, service_t,
-                           dist_mat, time_mat,
-                           depot_idx, depot_start, depot_end, capacity):
-    M = start_t.shape[0]
-    INF = 1e18
-    SENTINEL = -10**9  # 严格小于 -1（-1 可能是合法的“从车场出发”）
+def genInitialSol(model: Model):
+    unvisited = copy.deepcopy(model.node_id_list)
+    if not unvisited:
+        return []
+    seq = []
+    curr = 0
+    while unvisited:
+        nearest = min(
+            unvisited,
+            key=lambda x: (
+                model.demand_dict[x].end_time,
+                model.distance_matrix[model.id2idx[curr], model.id2idx[x]]
+            )
+        )
+        seq.append(nearest)
+        unvisited.remove(nearest)
+        curr = nearest
+    return seq
 
-    V = np.empty(M, dtype=np.float64)
-    for z in range(M):
-        V[z] = INF
-    V[depot_idx] = 0.0
+try:
+    from numba import njit
+    _NUMBA = True
+except ImportError:
+    _NUMBA = False
 
-    PredPos = np.empty(M, dtype=np.int64)
-    for z in range(M):
-        PredPos[z] = SENTINEL
+def _split_dp_core_py(seq, dem_arr, start_arr, end_arr, service_arr,
+                      Q, dist_mat, time_mat, depot_idx, depot_start, depot_end):
+    n = seq.shape[0]
+    F = np.full(n + 1, np.inf, dtype=np.float64)
+    pred = np.full(n + 1, -1, dtype=np.int32)
+    F[0] = 0.0
 
-    L = seq_idx.shape[0]
-    for i in range(L):
+    for i in range(n):
+        if not np.isfinite(F[i]):
+            continue
         load = 0.0
-        departure = 0.0
-        cost = 0.0
-        j = i
-        while j < L:
-            n2 = seq_idx[j]
-            load += demand[n2]
+        route_distance = 0.0
+        clock = depot_start
+        previous = depot_idx
 
-            if j == i:
-                # 车场 -> 首客户
-                arr_tmp = depot_start + time_mat[depot_idx, n2]
-                st = start_t[n2]
-                arrival = arr_tmp if arr_tmp >= st else st
-                # 首客户代价 = depot->n2 + n2->depot
-                cost = dist_mat[depot_idx, n2] + dist_mat[n2, depot_idx]
-            else:
-                # 上一客户 -> 当前客户
-                n3 = seq_idx[j - 1]
-                arr_tmp = departure + time_mat[n3, n2]
-                st = start_t[n2]
-                arrival = arr_tmp if arr_tmp >= st else st
-                # 用 prev->n2 + n2->depot 替换掉原来的 prev->depot
-                cost = cost - dist_mat[n3, depot_idx] + dist_mat[n3, n2] + dist_mat[n2, depot_idx]
+        for j in range(i, n):
+            current = seq[j]
+            load += dem_arr[current]
+            raw_arrival = clock + time_mat[previous, current]
+            service_start = max(raw_arrival, start_arr[current])
+            departure = service_start + service_arr[current]
+            route_distance += dist_mat[previous, current]
 
-            departure = arrival + service_t[n2]
-
-            feasible = (load <= capacity) and (arrival <= end_t[n2]) and \
-                       (departure + time_mat[n2, depot_idx] <= depot_end)
-
-            if feasible:
-                n4 = seq_idx[i - 1] if i >= 1 else depot_idx
-                new_val = V[n4] + cost
-                if new_val <= V[n2]:
-                    V[n2] = new_val
-                    PredPos[n2] = i - 1
-                j += 1
-            else:
-                # 关键修复：一旦不可行，停止扩展当前段
+            feasible = (
+                load <= Q
+                and service_start <= end_arr[current]
+                and departure + time_mat[current, depot_idx] <= depot_end
+            )
+            if not feasible:
                 break
 
-    return PredPos
+            complete_cost = route_distance + dist_mat[current, depot_idx]
+            if F[i] + complete_cost < F[j + 1]:
+                F[j + 1] = F[i] + complete_cost
+                pred[j + 1] = i
 
+            clock = departure
+            previous = current
 
-def extractRoutes(node_no_seq, P, depot_id):
-    route_list = []
-    j = len(node_no_seq)
-    while j > 0:
-        key = node_no_seq[j-1]
-        i = P.get(key, j - 2)
-        if i < -1: i = -1
-        route = [depot_id]
-        route.extend(node_no_seq[k] for k in range(i+1, j))
-        route.append(depot_id)
-        route_list.append(route)
-        j = i + 1
-    return route_list
+    return pred, float(F[n])
 
+if _NUMBA:
+    _split_dp_core = njit(_split_dp_core_py, cache=True, fastmath=True)
+else:
+    _split_dp_core = _split_dp_core_py
 
-def splitRoutes(node_no_seq, model: Model):
-    id_to_idx = model._id_to_idx; depot = model.depot
-    seq_idx = np.array([id_to_idx[nid] for nid in node_no_seq], dtype=np.int64)
-    pred_pos_arr = _jit_split_routes_pred(
+def splitRoutes(node_no_seq, model):
+    if not node_no_seq:
+        return [], 0.0
+
+    seq_idx = np.array([model.id2idx[id_] for id_ in node_no_seq], dtype=np.int32)
+    dem_arr = np.array([model.demand_dict[id_].demand for id_ in node_no_seq],
+                       dtype=np.float32)
+
+    pred, total_cost = _split_dp_core(
         seq_idx,
-        model._demand_arr, model._start_arr, model._end_arr, model._service_arr,
-        model._dist_mat_arr, model._time_mat_arr,
-        id_to_idx[depot.id], depot.start_time, depot.end_time, float(depot.v_cap)
+        model.demands_arr,
+        model.start_arr,
+        model.end_arr,
+        model.service_arr,
+        model.vehicle_cap,
+        model.distance_matrix,
+        model.time_matrix,
+        depot_idx=0,
+        depot_start=model.depot_start_time,
+        depot_end=model.depot_end_time
     )
-    P = {}
-    for pos, nid in enumerate(node_no_seq):
-        idx = id_to_idx[nid]
-        pred_pos = int(pred_pos_arr[idx])
-        if pred_pos >= -1: P[nid] = pred_pos
-    return extractRoutes(node_no_seq, P, depot.id)
 
+    if not math.isfinite(total_cost) or int(pred[len(seq_idx)]) < 0:
+        return [], float('inf')
 
-def calTravelCost(route_list, model: Model):
-    timetable_list = []
+    routes_idx = []
+    i = len(seq_idx)
+    while i > 0:
+        j = int(pred[i])
+        routes_idx.append(seq_idx[j:i])
+        i = j
+
+    routes_idx.reverse()
+
+    depot_id = model.depot.id
+    route_list = [
+        [depot_id] + [model.idx2id[int(idx)] for idx in r] + [depot_id]
+        for r in routes_idx
+    ]
+    return route_list, total_cost
+
+def calRouteDistance(route, model):
+    return sum(
+        model.distance_matrix[
+            model.id2idx[route[i]],
+            model.id2idx[route[i + 1]]
+        ]
+        for i in range(len(route) - 1)
+    )
+
+def calRouteSchedule(route, model):
+    if len(route) < 2 or route[0] != model.depot.id or route[-1] != model.depot.id:
+        return False, float('inf'), []
+
+    clock = float(model.depot_start_time)
+    load = 0.0
+    distance = 0.0
+    timetable = [(clock, clock)]
+
+    for previous_id, current_id in zip(route, route[1:]):
+        previous_idx = model.id2idx[previous_id]
+        current_idx = model.id2idx[current_id]
+        distance += float(model.distance_matrix[previous_idx, current_idx])
+        raw_arrival = clock + float(model.time_matrix[previous_idx, current_idx])
+
+        if current_id == model.depot.id:
+            if raw_arrival > model.depot_end_time + 1e-7:
+                return False, float('inf'), []
+            clock = raw_arrival
+            timetable.append((clock, clock))
+            continue
+
+        node = model.demand_dict[current_id]
+        load += node.demand
+        service_start = max(raw_arrival, node.start_time)
+        if load > model.vehicle_cap + 1e-7 or service_start > node.end_time + 1e-7:
+            return False, float('inf'), []
+        departure = service_start + node.service_time
+        timetable.append((service_start, departure))
+        clock = departure
+
+    return True, distance, timetable
+
+def calObj(node_no_seq, model):
+    route_list, total_distance = splitRoutes(node_no_seq, model)
+    if not route_list:
+        return float('inf'), [], [], []
     route_distance = []
-    total_distance = 0.0
+    timetable_list = []
     for route in route_list:
-        timetable = []
-        distance = 0.0
-        for i in range(len(route)):
-            if i == 0:
-                depot_id = route[i]; nxt = route[i+1]
-                travel_time = model.time_matrix[(depot_id, nxt)]
-                departure = max(model.depot.start_time, model.demand_dict[nxt].start_time - travel_time)
-                timetable.append((departure, departure))
-            elif 1 <= i <= len(route)-2:
-                last = route[i-1]; cur = route[i]
-                travel_time = model.time_matrix[(last, cur)]
-                arrival = max(timetable[-1][1] + travel_time, model.demand_dict[cur].start_time)
-                departure = arrival + model.demand_dict[cur].service_time
-                timetable.append((arrival, departure))
-                distance += model.distance_matrix[(last, cur)]
-            else:
-                last = route[i-1]; depot_id = route[i]
-                travel_time = model.time_matrix[(last, depot_id)]
-                departure = timetable[-1][1] + travel_time
-                timetable.append((departure, departure))
-                distance += model.distance_matrix[(last, depot_id)]
-        total_distance += distance
-        route_distance.append(distance)
+        feasible, distance, timetable = calRouteSchedule(route, model)
+        if not feasible:
+            return float('inf'), [], [], []
+        route_distance.append(float(distance))
         timetable_list.append(timetable)
-    return timetable_list, total_distance, route_distance
+
+    return float(total_distance), route_list, route_distance, timetable_list
 
 
-def calObj(node_no_seq, model: Model):
-    seq = copy.deepcopy(node_no_seq)
-    route_list = splitRoutes(seq, model)
-    timetables, cost, route_distance = calTravelCost(route_list, model)
-    return cost, route_list, route_distance, timetables
+def apply_destroy_to_partial_sol_explicit(destroyed_routes, model: Model):
+    """
+    方案A：直接基于显式残破路线构建 Partial Sol，不调用 DP Split
+    """
+    part = Sol()
+    part.route_list = destroyed_routes
 
-# ==============================
-# 破坏 / 修复算子（沿用 VRPTW 位置索引 remove_list 约定）
-# ==============================
+    # 累加各条残破路线的实际距离
+    route_distances = []
+    timetable_list = []
+    for route in destroyed_routes:
+        feasible, distance, timetable = calRouteSchedule(route, model)
+        if not feasible:
+            part.obj = float('inf')
+            part.route_distance = []
+            part.timetable_list = []
+            part.node_no_seq = []
+            return part
+        route_distances.append(float(distance))
+        timetable_list.append(timetable)
 
-def genInitialSol(node_no_seq):
-    arr = copy.deepcopy(node_no_seq); random.shuffle(arr); return arr
+    part.route_distance = route_distances
+    part.timetable_list = timetable_list
+    part.obj = sum(route_distances)
 
-def createRandomDestory(model: Model, sol: 'Sol' = None):  # sol未用，仅为统一签名
-    d = random.uniform(model.rand_d_min, model.rand_d_max)
-    return random.sample(range(model.number_of_demands), max(1, int(d*(model.number_of_demands-1))))
-
-def createWorseDestory(model: Model, sol: Sol):
-    deta_f = []
-    for node_no in sol.node_no_seq:
-        tmp = copy.deepcopy(sol.node_no_seq)
-        tmp.remove(node_no)
-        obj,_,_,_ = calObj(tmp, model)
-        deta_f.append(sol.obj - obj)
-    sorted_id = sorted(range(len(deta_f)), key=lambda k: deta_f[k], reverse=True)
-    d = max(1, min(model.worst_d_max, max(model.worst_d_min, len(sorted_id))))
-    return sorted_id[:d]
-
-def createRandomRepair(remove_list, model: Model, sol: Sol):
-    unassigned = []
-    assigned = []
-    for i in range(model.number_of_demands):
-        (unassigned if i in remove_list else assigned).append(sol.node_no_seq[i])
-    for node_no in unassigned:
-        idx = random.randint(0, max(0, len(assigned)-1))
-        assigned.insert(idx, node_no)
-    new_sol = Sol(); new_sol.node_no_seq = copy.deepcopy(assigned)
-    new_sol.obj, new_sol.route_list, new_sol.route_distance, new_sol.timetable_list = calObj(assigned, model)
-    return new_sol
-
-def _obj_of(seq, model):
-    return calObj(seq, model)[0]
-
-def findGreedyInsert(unassigned, assigned, model: Model):
-    best_node, best_idx, best_cost = None, 0, float('inf')
-    base_obj = _obj_of(assigned, model)
-    for node_no in unassigned:
-        for i in range(len(assigned)+1):
-            tmp = assigned[:]; tmp.insert(i, node_no)
-            obj = _obj_of(tmp, model); delta = obj - base_obj
-            if delta < best_cost:
-                best_cost = delta; best_idx = i; best_node = node_no
-    return best_node, best_idx
-
-def createGreedyRepair(remove_list, model: Model, sol: Sol):
-    unassigned = []
-    assigned = []
-    for i in range(model.number_of_demands):
-        (unassigned if i in remove_list else assigned).append(sol.node_no_seq[i])
-    while unassigned:
-        node, idx = findGreedyInsert(unassigned, assigned, model)
-        assigned.insert(idx, node); unassigned.remove(node)
-    new_sol = Sol(); new_sol.node_no_seq = copy.deepcopy(assigned)
-    new_sol.obj, new_sol.route_list, new_sol.route_distance, new_sol.timetable_list = calObj(assigned, model)
-    return new_sol
-
-def findRegretInsert(unassigned, assigned, model: Model, k_regret:int=2):
-    opt_node, opt_idx, opt_regret = None, 0, -float('inf')
-    base_obj = _obj_of(assigned, model)
-    for node_no in unassigned:
-        cand = []
-        for i in range(len(assigned)+1):
-            tmp = assigned[:]; tmp.insert(i, node_no)
-            obj = _obj_of(tmp, model); cand.append((obj-base_obj, i))
-        cand.sort(key=lambda x:x[0])
-        if cand:
-            regret = 0.0
-            for t in range(1, min(k_regret, len(cand))):
-                regret += cand[t][0] - cand[0][0]
-            if regret > opt_regret:
-                opt_regret = regret; opt_node = node_no; opt_idx = cand[0][1]
-    return opt_node, opt_idx
-
-def createRegretRepair(remove_list, model: Model, sol: Sol):
-    unassigned = []
-    assigned = []
-    for i in range(model.number_of_demands):
-        (unassigned if i in remove_list else assigned).append(sol.node_no_seq[i])
-    while unassigned:
-        node, idx = findRegretInsert(unassigned, assigned, model, k_regret=model.regret_n)
-        if node is None:
-            node, idx = findGreedyInsert(unassigned, assigned, model)
-        assigned.insert(idx, node); unassigned.remove(node)
-    new_sol = Sol(); new_sol.node_no_seq = copy.deepcopy(assigned)
-    new_sol.obj, new_sol.route_list, new_sol.route_distance, new_sol.timetable_list = calObj(assigned, model)
-    return new_sol
-
-# 包装：按 id 选择算子
-DESTROY_FUNCS = (createRandomDestory, createWorseDestory)
-REPAIR_FUNCS  = (createRandomRepair, createGreedyRepair, createRegretRepair)
-
-def doDestroy_by_id(did, model: Model, sol: Sol):
-    return DESTROY_FUNCS[did](model, sol)
-
-def doRepair_by_id(rid, remove_list, model: Model, sol: Sol):
-    return REPAIR_FUNCS[rid](remove_list, model, sol)
-
-def apply_destroy_to_partial_sol(sol: Sol, remove_list, model: Model):
-    part = Sol(); keep = [x for i,x in enumerate(sol.node_no_seq) if i not in set(remove_list)]
-    part.node_no_seq = keep
-    part.obj, part.route_list, part.route_distance, part.timetable_list = calObj(keep, model)
+    # 一维序列仅用作状态记录（如 GNN 输入），通过扁平化路线直接获得
+    part.node_no_seq = [c for r in destroyed_routes for c in r[1:-1]]
     return part
 
-# ==============================
-# 图构建（含时间窗特征）
-# ==============================
+# 5x5 operators are imported from vrptw_operators_5x5.py.
 
-def precompute_base_graph(model: Model, k_nn:int=10, use_full_graph_knn:bool=False, weight_mode:str='inv'):
-    n = len(model._id_list)  # 含 depot
+
+def routes_to_seq(routes):
+    return [c for r in routes for c in r[1:-1]]
+
+# ==================== 接口适配器 ==================== #
+def doDestroy_by_id(did, model: Model, sol: Sol, it, num_steps):
+    routes = sol.route_list if sol.route_list else [[0] + sol.node_no_seq + [0]]
+    num_cust = len(model.node_id_list)
+    if num_cust <= 1:
+        return routes, []
+
+    d_max_current = model.rand_d_min + (model.rand_d_max - model.rand_d_min) * math.exp(-3.0 * it / num_steps)
+    d = random.uniform(model.rand_d_min, d_max_current)
+    k = min(max(1, int(d * num_cust)), num_cust - 1 if num_cust > 1 else 0)
+
+    if did == 2:
+        new_routes, removed = DESTROY_FUNCS[did](
+            routes, k, dist_mat=model.distance_matrix, demands=model.demands_arr,
+            capacity=model.vehicle_cap, similarity_matrix=model.similarity_matrix,
+            model=model,
+        )
+    else:
+        new_routes, removed = DESTROY_FUNCS[did](
+            routes, k, dist_mat=model.distance_matrix, demands=model.demands_arr,
+            capacity=model.vehicle_cap, model=model,
+        )
+    return new_routes,removed
+
+
+def doRepair_by_id(rid, destroyed_routes, remove_list, model: Model, sol=None, *args, **kwargs):
+    """
+    方案A：直接在残破路线上执行插入，并直接计算最终距离，杜绝 DP Split
+    （兼容版本：支持接收 5 个或更多参数，自动忽略多余的 sol）
+    """
+    new_routes = REPAIR_FUNCS[rid](
+        destroyed_routes, remove_list, dist_mat=model.distance_matrix,
+        demands=model.demands_arr, capacity=model.vehicle_cap, model=model
+    )
+
+    new_sol = Sol()
+    new_sol.route_list = [r for r in new_routes if len(r) > 2]
+
+    route_distances = []
+    timetable_list = []
+    for route in new_sol.route_list:
+        feasible, distance, timetable = calRouteSchedule(route, model)
+        if not feasible:
+            new_sol.obj = float('inf')
+            new_sol.route_distance = []
+            new_sol.timetable_list = []
+            new_sol.node_no_seq = []
+            return new_sol
+        route_distances.append(float(distance))
+        timetable_list.append(timetable)
+
+    new_sol.route_distance = route_distances
+    new_sol.timetable_list = timetable_list
+    new_sol.obj = sum(route_distances)
+    new_sol.node_no_seq = [c for r in new_sol.route_list for c in r[1:-1]]
+    return new_sol
+
+# ---------------------- 预计算 ---------------------- #
+def precompute_base_graph(node_list, model: Model, k_nn=10, use_full_graph_knn=False, weight_mode='inv'):
+    n = len(node_list)
     edges = set()
+
+    coords = np.array([[node.x_coord, node.y_coord] for node in node_list], dtype=np.float32)
+    coords_shifted = coords - coords.min(axis=0)
+    coord_scale = max(
+        float(coords_shifted[:, 0].max()),
+        float(coords_shifted[:, 1].max()),
+        1e-6
+    )
+    norm_coords = coords_shifted / coord_scale
+
+    diff = norm_coords[:, None, :] - norm_coords[None, :, :]
+    norm_dist_mat = np.sqrt((diff ** 2).sum(-1, dtype=np.float32))
+
     if use_full_graph_knn:
         for u in range(n):
             for v in range(n):
-                if u != v: edges.add((u, v))
+                if u != v:
+                    edges.add((u, v))
     else:
-        k = min(k_nn, max(1, n-1))
+        k = min(k_nn, max(1, n - 1))
         for u in range(n):
-            dists = [(v, model._dist_mat_arr[u, v]) for v in range(n) if v != u]
+            dists = [(v, norm_dist_mat[u, v]) for v in range(n) if v != u]
             dists.sort(key=lambda x: x[1])
             for v, _ in dists[:k]:
-                edges.add((u, v)); edges.add((v, u))
+                edges.add((u, v))
+                edges.add((v, u))
+
     if not edges:
-        ei = torch.empty((2,0), dtype=torch.long, device=device)
+        ei = torch.empty((2, 0), dtype=torch.long, device=device)
         ew = torch.empty((0,), dtype=torch.float, device=device)
         return ei, ew
+
     ei = torch.tensor(list(edges), dtype=torch.long, device=device).t().contiguous()
+
     if weight_mode == 'dist':
-        ew = torch.tensor([float(model._dist_mat_arr[u, v]) for (u, v) in edges], dtype=torch.float, device=device)
+        ew = torch.tensor([float(norm_dist_mat[u, v]) for (u, v) in edges],
+                          dtype=torch.float, device=device)
     else:
-        ew = torch.tensor([1.0/(float(model._dist_mat_arr[u, v]) + 1e-6) for (u, v) in edges], dtype=torch.float, device=device)
+        ew = torch.tensor([1.0 / (1.0 + float(norm_dist_mat[u, v])) for (u, v) in edges],
+                          dtype=torch.float, device=device)
     return ei, ew
 
+# ---------------------- 构图：12维 CVRP 特征 + 6维静态时间窗特征 + 5维动态时间特征 ---------------------- #
+def build_graph(
+        sol: Sol,
+        node_list,
+        model: Model,
+        base_edge_index,
+        base_edge_weight,
+        removed_set=None,
+        include_path_edges=True
+):
+    n = len(node_list)
+    removed_set = set() if removed_set is None else set(removed_set)
 
-def _node_features_with_tw(model: Model, removed_idx_set=None):
-    # 结点特征：x,y,demand,served_flag, start,end,width,service, tightness, wait
-    n = len(model._id_list)
-    served = np.ones(n, dtype=np.float32)
-    if removed_idx_set:
-        for idx in removed_idx_set:
-            if 0 <= idx < n: served[idx] = 0.0
-    dep_idx = model._id_to_idx[model.depot.id]
-    horizon = max(1e-6, model.depot.end_time - model.depot.start_time)
-    earliest = model.depot.start_time + model._time_mat_arr[dep_idx]  # 到各点“最早出发到达”
+    coords = np.array(
+        [
+            [node.x_coord, node.y_coord]
+            for node in node_list
+        ],
+        dtype=np.float32
+    )
 
-    start = model._start_arr; end = model._end_arr; service = model._service_arr
-    width = end - start
-    wait = np.maximum(0.0, start - earliest)
-    tight = end - earliest
+    coords_shifted = coords - coords.min(axis=0)
 
-    # 规范化：空间坐标/需求不做缩放（可在数据规模前处理），时间相关按 horizon 归一
-    feats = np.stack([
-        model._x.astype(np.float32),
-        model._y.astype(np.float32),
-        model._demand_arr.astype(np.float32),
-        served.astype(np.float32),
-        (start - model.depot.start_time).astype(np.float32)/horizon,
-        (end   - model.depot.start_time).astype(np.float32)/horizon,
-        (width / max(1e-6, width.max())).astype(np.float32),
-        (service / max(1e-6, service.max())).astype(np.float32),
-        (tight / horizon).astype(np.float32),
-        (wait  / horizon).astype(np.float32),
-    ], axis=1)
-    return torch.tensor(feats, dtype=torch.float, device=device)
+    coord_scale = max(
+        float(coords_shifted[:, 0].max()),
+        float(coords_shifted[:, 1].max()),
+        1e-6
+    )
 
+    norm_coords = coords_shifted / coord_scale
 
-def build_graph(sol: Sol, model: Model, base_edge_index, base_edge_weight, removed_idx_set=None, include_path_edges=True):
-    x = _node_features_with_tw(model, removed_idx_set=removed_idx_set)
-    edge_index = base_edge_index; edge_weight = base_edge_weight
-    if include_path_edges and sol.route_list:
-        dyn_edges = set()
+    capacity = max(float(model.vehicle_cap), 1e-6)
+    num_customers = max(1, len(model.node_id_list))
+    max_distance = max(
+        float(np.max(model.distance_matrix)),
+        1e-6
+    )
+
+    instance_distance_scale = max(
+        max_distance * num_customers,
+        1e-6
+    )
+    depot_start = float(model.depot_start_time)
+    horizon = max(float(model.depot_end_time - model.depot_start_time), 1e-6)
+
+    served_flag = np.ones(n, dtype=np.float32)
+
+    for idx, node in enumerate(node_list):
+        if node.id in removed_set:
+            served_flag[idx] = 0.0
+
+    route_load_ratio = np.zeros(n, dtype=np.float32)
+    route_position_ratio = np.zeros(n, dtype=np.float32)
+    predecessor_distance = np.zeros(n, dtype=np.float32)
+    successor_distance = np.zeros(n, dtype=np.float32)
+    removal_saving = np.zeros(n, dtype=np.float32)
+    route_distance_ratio = np.zeros(n, dtype=np.float32)
+    route_customer_ratio = np.zeros(n, dtype=np.float32)
+    # Dynamic features are zero for unrouted customers. served_flag tells the
+    # encoder that these zeroes represent a post-destroy customer.
+    service_start_global = np.zeros(n, dtype=np.float32)
+    current_wait_local = np.zeros(n, dtype=np.float32)
+    local_time_pressure = np.zeros(n, dtype=np.float32)
+    downstream_pressure = np.zeros(n, dtype=np.float32)
+    route_finish_global = np.zeros(n, dtype=np.float32)
+
+    if sol.route_list:
         for route in sol.route_list:
-            for i in range(len(route)-1):
-                u_id, v_id = route[i], route[i+1]
-                u = model._id_to_idx[u_id]; v = model._id_to_idx[v_id]
-                dyn_edges.add((u, v)); dyn_edges.add((v, u))
-        if dyn_edges:
-            ei2 = torch.tensor(list(dyn_edges), dtype=torch.long, device=device).t().contiguous()
-            ew2 = torch.tensor([1.0/(model._dist_mat_arr[u, v] + 1e-6) for (u, v) in dyn_edges], dtype=torch.float, device=device)
-            edge_index = torch.cat([edge_index, ei2], dim=1)
-            edge_weight = torch.cat([edge_weight, ew2], dim=0)
-    return Data(x=x, edge_index=edge_index, edge_weight=edge_weight)
+            if len(route) <= 2:
+                continue
 
-# ==============================
-# GNN 编码器 & Duel-AC Agent（输入维按 TW 扩展）
-# ==============================
+            customers = route[1:-1]
+            customer_count = len(customers)
+
+            route_load = sum(
+                model.demand_dict[c].demand
+                for c in customers
+            )
+
+            route_indices = [
+                model.id2idx[node_id]
+                for node_id in route
+            ]
+
+            route_distance = float(
+                model.distance_matrix[
+                    route_indices[:-1],
+                    route_indices[1:]
+                ].sum()
+            )
+
+            route_schedule = []
+            clock = depot_start
+            route_return_time = clock
+            for previous_id, current_id in zip(route, route[1:]):
+                previous_idx = model.id2idx[previous_id]
+                current_idx = model.id2idx[current_id]
+                raw_arrival = clock + float(model.time_matrix[previous_idx, current_idx])
+
+                if current_id == model.depot.id:
+                    route_return_time = raw_arrival
+                    break
+
+                current_node = model.demand_dict[current_id]
+                service_start = max(raw_arrival, float(current_node.start_time))
+                waiting_time = max(0.0, service_start - raw_arrival)
+                departure = service_start + float(current_node.service_time)
+                window_width = max(
+                    float(current_node.end_time - current_node.start_time),
+                    1e-6
+                )
+                pressure = float(np.clip(
+                    (service_start - float(current_node.start_time)) / window_width,
+                    0.0,
+                    1.0
+                ))
+                route_schedule.append(
+                    (
+                        current_id,
+                        service_start,
+                        waiting_time,
+                        window_width,
+                        pressure
+                    )
+                )
+                clock = departure
+
+            finish_ratio = float(np.clip(
+                (route_return_time - depot_start) / horizon,
+                0.0,
+                1.0
+            ))
+
+            max_future_pressure = 0.0
+            for (
+                    customer_id,
+                    service_start,
+                    waiting_time,
+                    window_width,
+                    pressure
+            ) in reversed(route_schedule):
+                node_idx = model.id2idx[customer_id]
+                max_future_pressure = max(max_future_pressure, pressure)
+                service_start_global[node_idx] = np.clip(
+                    (service_start - depot_start) / horizon,
+                    0.0,
+                    1.0
+                )
+                current_wait_local[node_idx] = (
+                    waiting_time / (waiting_time + window_width)
+                )
+                local_time_pressure[node_idx] = pressure
+                downstream_pressure[node_idx] = max_future_pressure
+                route_finish_global[node_idx] = finish_ratio
+
+            for position, customer_id in enumerate(
+                    customers,
+                    start=1
+            ):
+                node_idx = model.id2idx[customer_id]
+
+                predecessor_id = route[position - 1]
+                successor_id = route[position + 1]
+
+                predecessor_idx = model.id2idx[predecessor_id]
+                successor_idx = model.id2idx[successor_id]
+
+                d_pre = float(
+                    model.distance_matrix[
+                        predecessor_idx,
+                        node_idx
+                    ]
+                )
+
+                d_succ = float(
+                    model.distance_matrix[
+                        node_idx,
+                        successor_idx
+                    ]
+                )
+
+                d_bypass = float(
+                    model.distance_matrix[
+                        predecessor_idx,
+                        successor_idx
+                    ]
+                )
+
+                saving = d_pre + d_succ - d_bypass
+
+                route_load_ratio[node_idx] = (
+                    route_load / capacity
+                )
+
+                if customer_count <= 1:
+                    route_position_ratio[node_idx] = 0.5
+                else:
+                    route_position_ratio[node_idx] = (
+                        (position - 1)
+                        / float(customer_count - 1)
+                    )
+
+                predecessor_distance[node_idx] = (
+                    d_pre / max_distance
+                )
+
+                successor_distance[node_idx] = (
+                    d_succ / max_distance
+                )
+
+                removal_saving[node_idx] = (
+                    saving / max_distance
+                )
+
+                route_distance_ratio[node_idx] = (
+                    route_distance / instance_distance_scale
+                )
+
+                route_customer_ratio[node_idx] = (
+                    customer_count / float(num_customers)
+                )
+
+    x_data = []
+    depot_idx = model.id2idx[model.depot.id]
+
+    for idx, node in enumerate(node_list):
+        depot_flag = (
+            1.0
+            if node.id == model.depot.id
+            else 0.0
+        )
+
+        demand_ratio = (
+            float(node.demand) / capacity
+        )
+
+        earliest_arrival = (
+            depot_start
+            + float(model.time_matrix[depot_idx, idx])
+        )
+        window_width = max(
+            float(node.end_time - node.start_time),
+            1e-6
+        )
+        direct_start = max(earliest_arrival, float(node.start_time))
+        direct_wait = max(0.0, direct_start - earliest_arrival)
+
+        ready_ratio = np.clip(
+            (float(node.start_time) - depot_start) / horizon,
+            0.0,
+            1.0
+        )
+        due_ratio = np.clip(
+            (float(node.end_time) - depot_start) / horizon,
+            0.0,
+            1.0
+        )
+        window_width_ratio = np.clip(window_width / horizon, 0.0, 1.0)
+        service_ratio = np.clip(
+            float(node.service_time) / window_width,
+            0.0,
+            1.0
+        )
+        initial_wait_ratio = direct_wait / (direct_wait + window_width)
+        initial_tightness = np.clip(
+            (float(node.end_time) - direct_start) / window_width,
+            -1.0,
+            1.0
+        )
+
+        x_data.append([
+            float(norm_coords[idx, 0]),
+            float(norm_coords[idx, 1]),
+            demand_ratio,
+            depot_flag,
+            float(served_flag[idx]),
+            float(route_load_ratio[idx]),
+            float(route_position_ratio[idx]),
+            float(predecessor_distance[idx]),
+            float(successor_distance[idx]),
+            float(removal_saving[idx]),
+            float(route_distance_ratio[idx]),
+            float(route_customer_ratio[idx]),
+            float(ready_ratio),
+            float(due_ratio),
+            float(window_width_ratio),
+            float(service_ratio),
+            float(initial_wait_ratio),
+            float(initial_tightness),
+            float(service_start_global[idx]),
+            float(current_wait_local[idx]),
+            float(local_time_pressure[idx]),
+            float(downstream_pressure[idx]),
+            float(route_finish_global[idx])
+        ])
+
+    x = torch.tensor(
+        x_data,
+        dtype=torch.float,
+        device=device
+    )
+    if x.size(1) != NODE_FEATURE_DIM:
+        raise RuntimeError(
+            f"Expected {NODE_FEATURE_DIM} node features, got {x.size(1)}."
+        )
+    if not torch.isfinite(x).all():
+        raise RuntimeError("Node features contain NaN or infinite values.")
+
+    edge_index = base_edge_index
+    edge_weight = base_edge_weight
+
+    if include_path_edges and sol.route_list:
+        dynamic_edges = set()
+
+        for route in sol.route_list:
+            for idx in range(len(route) - 1):
+                u_id = route[idx]
+                v_id = route[idx + 1]
+
+                u_idx = model.id2idx[u_id]
+                v_idx = model.id2idx[v_id]
+
+                if (
+                        0 <= u_idx < n
+                        and 0 <= v_idx < n
+                ):
+                    dynamic_edges.add((u_idx, v_idx))
+                    dynamic_edges.add((v_idx, u_idx))
+
+        if dynamic_edges:
+            dynamic_edge_list = list(dynamic_edges)
+
+            dynamic_edge_index = torch.tensor(
+                dynamic_edge_list,
+                dtype=torch.long,
+                device=device
+            ).t().contiguous()
+
+            dynamic_edge_weights = []
+
+            for u_idx, v_idx in dynamic_edge_list:
+                normalized_distance = float(
+                    np.linalg.norm(
+                        norm_coords[u_idx]
+                        - norm_coords[v_idx]
+                    )
+                )
+
+                dynamic_edge_weights.append(
+                    1.0 / (1.0 + normalized_distance)
+                )
+
+            dynamic_edge_weight = torch.tensor(
+                dynamic_edge_weights,
+                dtype=torch.float,
+                device=device
+            )
+
+            edge_index = torch.cat(
+                [
+                    edge_index,
+                    dynamic_edge_index
+                ],
+                dim=1
+            )
+
+            edge_weight = torch.cat(
+                [
+                    edge_weight,
+                    dynamic_edge_weight
+                ],
+                dim=0
+            )
+
+    return Data(
+        x=x,
+        edge_index=edge_index,
+        edge_weight=edge_weight
+    )
+
+# ---------------------- 缓冲区 ---------------------- #
+class RolloutBuffer:
+    """
+    短期 on-policy rollout。
+    每条记录包含同一个 ALNS 迭代中的转移状态与奖励。
+    """
+    def __init__(self):
+        self.records = []
+
+    @staticmethod
+    def clone_state_to_cpu(state_record):
+        (
+            graph,
+            stage,
+            destroy_ratio,
+            destroy_id,
+            progress,
+            temperature_ratio,
+            best_gap,
+            stagnation_ratio
+        ) = state_record
+
+        return (
+            graph.clone().cpu(),
+            int(stage),
+            float(destroy_ratio),
+            int(destroy_id),
+            float(progress),
+            float(temperature_ratio),
+            float(best_gap),
+            float(stagnation_ratio)
+        )
+
+    def add(
+            self,
+            full_state,
+            destroy_action,
+            partial_state,
+            repair_action,
+            repair_reward,
+            next_full_state,
+            done
+    ):
+        self.records.append({
+            "full_state": self.clone_state_to_cpu(full_state),
+            "destroy_action": int(destroy_action),
+            "partial_state": self.clone_state_to_cpu(partial_state),
+            "repair_action": int(repair_action),
+            "repair_reward": float(repair_reward),
+            "next_full_state": self.clone_state_to_cpu(next_full_state),
+            "done": float(done)
+        })
+
+    def clear(self):
+        self.records.clear()
+
+    def __len__(self):
+        return len(self.records)
+
+    def as_batch(self):
+        if not self.records:
+            raise ValueError("RolloutBuffer 为空。")
+
+        return {
+            "full_states": [item["full_state"] for item in self.records],
+            "destroy_actions": [item["destroy_action"] for item in self.records],
+            "partial_states": [item["partial_state"] for item in self.records],
+            "repair_actions": [item["repair_action"] for item in self.records],
+            "repair_rewards": [item["repair_reward"] for item in self.records],
+            "next_full_states": [item["next_full_state"] for item in self.records],
+            "dones": [item["done"] for item in self.records]
+        }
+
+# ---------------------- GNN 编码器 & Agent ---------------------- #
 class GraphEncoder(torch.nn.Module):
-    def __init__(self, in_dim=10, hid=64, out_dim=64, use_attention=True):
+    def __init__(self, in_dim=NODE_FEATURE_DIM, hid=32, out_dim=32, use_attention=True):
         super().__init__()
         self.conv1 = GCNConv(in_dim, hid)
         self.conv2 = GCNConv(hid, out_dim)
         self.out_dim = out_dim
+
         self.use_attention = use_attention
-        self.score = torch.nn.Linear(out_dim, 1) if use_attention else None
+        self.score = (
+            torch.nn.Linear(out_dim, 1)
+            if use_attention
+            else None
+        )
+
         self.fallback = torch.nn.Sequential(
-            torch.nn.Linear(in_dim, hid), torch.nn.ReLU(),
+            torch.nn.Linear(in_dim, hid),
+            torch.nn.ReLU(),
             torch.nn.Linear(hid, out_dim)
         )
+
     def forward(self, data: Data):
-        x, edge_index = data.x, data.edge_index
-        w = getattr(data, 'edge_weight', None)
+        x = data.x
+        edge_index = data.edge_index
+        edge_weight = getattr(data, 'edge_weight', None)
+        batch = getattr(data, 'batch', None)
+
+        if batch is None:
+            batch = torch.zeros(x.size(0), dtype=torch.long, device=x.device)
+
         if edge_index is None or edge_index.numel() == 0:
             h = self.fallback(x)
         else:
-            h = F.relu(self.conv1(x, edge_index, w))
-            h = self.conv2(h, edge_index, w)
+            h = F.relu(self.conv1(x, edge_index, edge_weight=edge_weight))
+            h = self.conv2(h, edge_index, edge_weight=edge_weight)
+
         if self.use_attention:
             scores = self.score(h).squeeze(-1)
-            alpha = torch.softmax(scores, dim=0)
-            g_avg = (alpha.unsqueeze(-1) * h).sum(dim=0, keepdim=True)
+            alpha = pyg_softmax(scores, batch)
+            g_avg = global_add_pool(alpha.unsqueeze(-1) * h, batch)
         else:
-            g_avg = h.mean(dim=0, keepdim=True)
-        g_max, _ = h.max(dim=0, keepdim=True)
-        return torch.cat([g_avg, g_max], dim=-1)  # [1, 2*out_dim]
+            node_sum = global_add_pool(h, batch)
+            node_count = torch.bincount(batch, minlength=node_sum.size(0)).to(h.dtype).unsqueeze(-1)
+            g_avg = node_sum / node_count.clamp_min(1.0)
+
+        g_max = global_max_pool(h, batch)
+        return torch.cat([g_avg, g_max], dim=-1)
+
+
+def load_pretrained_checkpoint(agent, file_path):
+    """只加载网络参数，在线优化器从当前程序的学习率重新初始化。"""
+    checkpoint_path = Path(file_path)
+    if not checkpoint_path.is_file():
+        raise FileNotFoundError(f"预训练模型不存在: {checkpoint_path}")
+
+    try:
+        checkpoint = torch.load(
+            checkpoint_path,
+            map_location=device,
+            weights_only=False
+        )
+    except TypeError:
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+
+    if isinstance(checkpoint, dict) and "agent_state_dict" in checkpoint:
+        architecture = checkpoint.get("architecture")
+        if architecture is not None and architecture != CHECKPOINT_ARCHITECTURE:
+            raise ValueError(
+                f"checkpoint 架构为 {architecture!r}，"
+                f"当前需要 {CHECKPOINT_ARCHITECTURE!r}。"
+            )
+
+        feature_names = checkpoint.get("node_feature_names")
+        if feature_names is not None and tuple(feature_names) != NODE_FEATURE_NAMES:
+            raise ValueError("checkpoint 的节点特征名称或顺序与当前 Online 程序不一致。")
+
+        state_dict = checkpoint["agent_state_dict"]
+        global_step = int(checkpoint.get("global_step", 0))
+    else:
+        state_dict = checkpoint
+        global_step = 0
+
+    try:
+        agent.load_state_dict(state_dict, strict=True)
+    except (RuntimeError, TypeError) as exc:
+        raise RuntimeError(
+            "预训练模型与当前23维 GNN + 双 Actor + 单 Critic 架构不兼容。"
+        ) from exc
+
+    return global_step
+
+
+def save_online_checkpoint(agent, file_path, global_step=0):
+    checkpoint_path = Path(file_path)
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save({
+        "architecture": CHECKPOINT_ARCHITECTURE,
+        "node_feature_names": NODE_FEATURE_NAMES,
+        "agent_state_dict": agent.state_dict(),
+        "opt_enc_state_dict": agent.opt_enc.state_dict(),
+        "opt_critic_state_dict": agent.opt_critic.state_dict(),
+        "opt_ad_state_dict": agent.opt_ad.state_dict(),
+        "opt_ar_state_dict": agent.opt_ar.state_dict(),
+        "global_step": int(global_step)
+    }, checkpoint_path)
+
+
+def scale_online_learning_rates(agent, scale):
+    if scale <= 0:
+        raise ValueError('--pretrained_lr_scale 必须大于 0。')
+
+    for optimizer in (
+        agent.opt_enc,
+        agent.opt_critic,
+        agent.opt_ad,
+        agent.opt_ar
+    ):
+        for param_group in optimizer.param_groups:
+            param_group["lr"] *= scale
 
 class DACAgent(torch.nn.Module):
-    def __init__(self, in_dim=10, enc_dim=64, extra_state_dim=2, hid=64, gamma=0.9, ent_coef=0.01):
+    def __init__(
+            self,
+            enc_dim=64,
+            hid=64,
+            gamma_repair=0.9,
+            critic_coef=1.0
+    ):
         super().__init__()
-        self.encoder = GraphEncoder(in_dim=in_dim, hid=hid, out_dim=enc_dim, use_attention=True).to(device)
-        enc_feat_dim = self.encoder.out_dim * 2
+        self.n_destroy = 5
+        self.n_repair = 5
+        self.extra_state_dim = 12 + GLOBAL_TIME_STATE_DIM
+        self.min_action_prob = 0.04
+
+        self.encoder = GraphEncoder(
+            in_dim=NODE_FEATURE_DIM,
+            hid=hid,
+            out_dim=enc_dim,
+            use_attention=True
+        ).to(device)
+
+        encoded_dim = self.encoder.out_dim * 2
+        complete_state_dim = encoded_dim + self.extra_state_dim
+
         self.critic = torch.nn.Sequential(
-            torch.nn.Linear(enc_feat_dim + extra_state_dim, hid), torch.nn.ReLU(),
+            torch.nn.Linear(complete_state_dim, hid),
+            torch.nn.ReLU(),
             torch.nn.Linear(hid, 1)
         ).to(device)
+
         self.actor_destroy = torch.nn.Sequential(
-            torch.nn.Linear(enc_feat_dim + extra_state_dim, hid), torch.nn.ReLU(),
-            torch.nn.Linear(hid, 2)
+            torch.nn.Linear(complete_state_dim, hid),
+            torch.nn.ReLU(),
+            torch.nn.Linear(hid, self.n_destroy)
         ).to(device)
+
         self.actor_repair = torch.nn.Sequential(
-            torch.nn.Linear(enc_feat_dim + extra_state_dim, hid), torch.nn.ReLU(),
-            torch.nn.Linear(hid, 3)
+            torch.nn.Linear(complete_state_dim, hid),
+            torch.nn.ReLU(),
+            torch.nn.Linear(hid, self.n_repair)
         ).to(device)
-        self.opt_enc = torch.optim.Adam(self.encoder.parameters(), lr=1e-3)
-        self.opt_critic = torch.optim.Adam(self.critic.parameters(), lr=1e-3)
-        self.opt_ad = torch.optim.Adam(self.actor_destroy.parameters(), lr=1e-3)
-        self.opt_ar = torch.optim.Adam(self.actor_repair.parameters(), lr=1e-3)
-        self.gamma = gamma; self.ent_coef = ent_coef; self.n_destroy = 2
-    def build_state(self, graph: Data, ratio: float, destroy_id:int=0):
-        g = self.encoder(graph)
-        r = torch.tensor([[float(ratio)]], device=device, dtype=g.dtype)
-        d_norm = float(destroy_id)/(self.n_destroy-1) if self.n_destroy>1 else 0.0
-        d = torch.tensor([[d_norm]], device=device, dtype=g.dtype)
-        return torch.cat([g, r, d], dim=-1)
-    def _sample_with_eps(self, logits, eps, n_actions):
-        if random.random() < eps: return random.randrange(n_actions)
-        probs = F.softmax(logits, dim=-1)
-        return torch.distributions.Categorical(probs).sample().item()
-    def act_destroy(self, state, eps=0.1):
-        return self._sample_with_eps(self.actor_destroy(state), eps, 2)
-    def act_repair(self, state, eps=0.1):
-        return self._sample_with_eps(self.actor_repair(state), eps, 3)
-    def update(self, d_trans, r_trans):
-        sd  = torch.cat(d_trans['states'], dim=0).to(device)
-        ad  = torch.tensor(d_trans['actions'], dtype=torch.long, device=device).view(-1,1)
-        rd  = torch.tensor(d_trans['rewards'], dtype=torch.float, device=device).view(-1,1)
-        sdn = torch.cat(d_trans['next_states'], dim=0).to(device)
-        dd  = torch.tensor(d_trans['dones'], dtype=torch.float, device=device).view(-1,1)
-        sr  = torch.cat(r_trans['states'], dim=0).to(device)
-        ar  = torch.tensor(r_trans['actions'], dtype=torch.long, device=device).view(-1,1)
-        rr  = torch.tensor(r_trans['rewards'], dtype=torch.float, device=device).view(-1,1)
-        srn = torch.cat(r_trans['next_states'], dim=0).to(device)
-        dr  = torch.tensor(r_trans['dones'], dtype=torch.float, device=device).view(-1,1)
+
+        self.opt_enc = torch.optim.Adam(self.encoder.parameters(), lr=3e-5, weight_decay=1e-5)
+        self.opt_critic = torch.optim.Adam(self.critic.parameters(), lr=3e-4)
+        self.opt_ad = torch.optim.Adam(self.actor_destroy.parameters(), lr=1e-4, weight_decay=1e-4)
+        self.opt_ar = torch.optim.Adam(self.actor_repair.parameters(), lr=1e-4, weight_decay=1e-4)
+
+        self.gamma_destroy = 1.0
+        self.gamma_repair = gamma_repair
+        self.critic_coef = critic_coef
+
+    @staticmethod
+    def _expand_scalar_feature(value, batch_size, dtype, target_device):
+        tensor = torch.as_tensor(value, dtype=dtype, device=target_device).view(-1, 1)
+        if tensor.size(0) == 1 and batch_size > 1:
+            tensor = tensor.expand(batch_size, 1)
+        if tensor.size(0) != batch_size:
+            raise ValueError(f"状态特征数量 {tensor.size(0)} 与图数量 {batch_size} 不一致。")
+        return tensor
+
+    def build_state(
+            self,
+            graph,
+            stage,
+            destroy_ratio,
+            destroy_id,
+            progress,
+            temperature_ratio,
+            best_gap,
+            stagnation_ratio
+    ):
+        graph_embedding = self.encoder(graph)
+        batch_size = graph_embedding.size(0)
+        dtype = graph_embedding.dtype
+        target_device = graph_embedding.device
+
+        stage_tensor = torch.as_tensor(stage, dtype=torch.long, device=target_device).view(-1)
+        if stage_tensor.numel() == 1 and batch_size > 1:
+            stage_tensor = stage_tensor.expand(batch_size)
+        if stage_tensor.numel() != batch_size:
+            raise ValueError("stage 数量与图 Batch 数量不一致。")
+
+        stage_one_hot = F.one_hot(stage_tensor.clamp(0, 1), num_classes=2).to(dtype)
+        ratio_tensor = self._expand_scalar_feature(destroy_ratio, batch_size, dtype, target_device)
+
+        destroy_id_tensor = torch.as_tensor(destroy_id, dtype=torch.long, device=target_device).view(-1)
+        if destroy_id_tensor.numel() == 1 and batch_size > 1:
+            destroy_id_tensor = destroy_id_tensor.expand(batch_size)
+        if destroy_id_tensor.numel() != batch_size:
+            raise ValueError("destroy_id 数量与图 Batch 数量不一致。")
+
+        valid_destroy_mask = (destroy_id_tensor >= 0).to(dtype).unsqueeze(-1)
+        safe_destroy_id = destroy_id_tensor.clamp(0, self.n_destroy - 1)
+        destroy_one_hot = F.one_hot(safe_destroy_id, num_classes=self.n_destroy).to(dtype)
+        destroy_one_hot = destroy_one_hot * valid_destroy_mask
+
+        progress_tensor = self._expand_scalar_feature(progress, batch_size, dtype, target_device)
+        temperature_tensor = self._expand_scalar_feature(temperature_ratio, batch_size, dtype, target_device)
+        best_gap_tensor = self._expand_scalar_feature(best_gap, batch_size, dtype, target_device)
+        stagnation_tensor = self._expand_scalar_feature(stagnation_ratio, batch_size, dtype, target_device)
+
+        graph_batch = getattr(graph, 'batch', None)
+        if graph_batch is None:
+            graph_batch = torch.zeros(
+                graph.x.size(0),
+                dtype=torch.long,
+                device=target_device
+            )
+        non_depot_mask = (1.0 - graph.x[:, FEATURE_DEPOT_FLAG]).unsqueeze(-1)
+        served_mask = graph.x[:, FEATURE_SERVED_FLAG].unsqueeze(-1)
+        retained_mask = non_depot_mask * served_mask
+        removed_mask = non_depot_mask * (1.0 - served_mask)
+
+        retained_time_features = graph.x[:, [
+            FEATURE_CURRENT_WAIT_LOCAL,
+            FEATURE_LOCAL_TIME_PRESSURE,
+            FEATURE_DOWNSTREAM_PRESSURE
+        ]]
+        retained_sum = global_add_pool(
+            retained_time_features * retained_mask,
+            graph_batch
+        )
+        retained_count = global_add_pool(
+            retained_mask,
+            graph_batch
+        ).clamp_min(1.0)
+
+        removed_time_features = graph.x[:, [
+            FEATURE_READY_GLOBAL,
+            FEATURE_DIRECT_SLACK_LOCAL
+        ]]
+        removed_sum = global_add_pool(
+            removed_time_features * removed_mask,
+            graph_batch
+        )
+        removed_count = global_add_pool(
+            removed_mask,
+            graph_batch
+        ).clamp_min(1.0)
+
+        tw_global_state = torch.cat(
+            [
+                retained_sum / retained_count,
+                removed_sum / removed_count
+            ],
+            dim=-1
+        )
+
+        extra_state = torch.cat(
+            [
+                stage_one_hot,
+                ratio_tensor,
+                destroy_one_hot,
+                progress_tensor,
+                temperature_tensor,
+                best_gap_tensor,
+                stagnation_tensor,
+                tw_global_state
+            ],
+            dim=-1
+        )
+        return torch.cat([graph_embedding, extra_state], dim=-1)
+
+    def encode_state_records(self, state_records):
+        graphs, stages, ratios, destroy_ids = [], [], [], []
+        progresses, temperature_ratios, best_gaps, stagnation_ratios = [], [], [], []
+
+        for record in state_records:
+            g, s, dr, di, p, tr, bg, sr = record
+            graphs.append(g)
+            stages.append(int(s))
+            ratios.append(float(dr))
+            destroy_ids.append(int(di))
+            progresses.append(float(p))
+            temperature_ratios.append(float(tr))
+            best_gaps.append(float(bg))
+            stagnation_ratios.append(float(sr))
+
+        graph_batch = Batch.from_data_list(graphs).to(device)
+        return self.build_state(
+            graph=graph_batch,
+            stage=stages,
+            destroy_ratio=ratios,
+            destroy_id=destroy_ids,
+            progress=progresses,
+            temperature_ratio=temperature_ratios,
+            best_gap=best_gaps,
+            stagnation_ratio=stagnation_ratios
+        )
+
+        # 增加：统一的带保底探索分布生成方法
+    def _policy_distribution(self, logits):
+        raw_probs = F.softmax(logits, dim=-1)
+
+        num_actions = raw_probs.size(-1)
+        p_min = min(
+            self.min_action_prob,
+            (1.0 - 1e-6) / num_actions
+        )
+
+        probs = (
+                (1.0 - num_actions * p_min) * raw_probs
+                + p_min
+        )
+
+        return torch.distributions.Categorical(probs=probs)
+
+    # 替换：去除 @staticmethod 的动作选择方法
+    def _select_action(self, logits, deterministic=False):
+        distribution = self._policy_distribution(logits)
+
+        if deterministic:
+            action_tensor = torch.argmax(
+                distribution.probs,
+                dim=-1
+            )
+        else:
+            action_tensor = distribution.sample()
+
+        probabilities = distribution.probs
+
+        return (
+            int(action_tensor.item()),
+            probabilities.detach().cpu().squeeze(0).numpy()
+        )
+
+    def act_destroy(self, state, deterministic=False):
+        logits = self.actor_destroy(state)
+        return self._select_action(logits, deterministic=deterministic)
+
+    def act_repair(self, state, deterministic=False):
+        logits = self.actor_repair(state)
+        return self._select_action(logits, deterministic=deterministic)
+
+    @staticmethod
+    def _normalize_advantage(advantage):
+        if advantage.numel() <= 1:
+            return advantage
+
+        centered = advantage - advantage.mean()
+
+        # 不再除以当前 batch 的微小标准差
+        return centered.clamp(-1.0, 1.0)
+
+    @staticmethod
+    def _grad_norm(parameters):
+        squared_norm = 0.0
+        for parameter in parameters:
+            if parameter.grad is not None:
+                norm = parameter.grad.detach().norm(2)
+                squared_norm += norm.item() ** 2
+        return squared_norm ** 0.5
+
+    def update_rollout(self, rollout_buffer, entropy_coef):
+        if len(rollout_buffer) == 0:
+            return None
+
+        batch = rollout_buffer.as_batch()
+
+        full_states = self.encode_state_records(batch["full_states"])
+        partial_states = self.encode_state_records(batch["partial_states"])
+
+        destroy_actions = torch.tensor(batch["destroy_actions"], dtype=torch.long, device=device)
+        repair_actions = torch.tensor(batch["repair_actions"], dtype=torch.long, device=device)
+        repair_rewards = torch.tensor(batch["repair_rewards"], dtype=torch.float, device=device).view(-1, 1)
+        dones = torch.tensor(batch["dones"], dtype=torch.float, device=device).view(-1, 1)
+
+        value_full = self.critic(full_states)
+        value_partial = self.critic(partial_states)
+
         with torch.no_grad():
-            vdn = self.critic(sdn); vrn = self.critic(srn)
-            td_tgt_d = rd + self.gamma * vdn * (1 - dd)
-            td_tgt_r = rr + self.gamma * vrn * (1 - dr)
-        v_d = self.critic(sd); v_r = self.critic(sr)
-        critic_loss = F.mse_loss(v_d, td_tgt_d) + F.mse_loss(v_r, td_tgt_r)
-        td_delta_d = (td_tgt_d - v_d).detach(); td_delta_r = (td_tgt_r - v_r).detach()
-        logits_d = self.actor_destroy(sd); logits_r = self.actor_repair(sr)
-        logp_d = torch.log(F.softmax(logits_d, dim=1).gather(1, ad) + 1e-8)
-        logp_r = torch.log(F.softmax(logits_r, dim=1).gather(1, ar) + 1e-8)
-        ent_d = -(F.softmax(logits_d, dim=1) * F.log_softmax(logits_d, dim=1)).sum(dim=1, keepdim=True).mean()
-        ent_r = -(F.softmax(logits_r, dim=1) * F.log_softmax(logits_r, dim=1)).sum(dim=1, keepdim=True).mean()
-        actor_d_loss = torch.mean(-logp_d * td_delta_d) - self.ent_coef * ent_d
-        actor_r_loss = torch.mean(-logp_r * td_delta_r) - self.ent_coef * ent_r
-        total = critic_loss + actor_d_loss + actor_r_loss
-        self.opt_enc.zero_grad(); self.opt_critic.zero_grad(); self.opt_ad.zero_grad(); self.opt_ar.zero_grad()
-        total.backward()
-        torch.nn.utils.clip_grad_norm_(list(self.encoder.parameters()) + list(self.critic.parameters()) + list(self.actor_destroy.parameters()) + list(self.actor_repair.parameters()), 1.0)
-        self.opt_enc.step(); self.opt_critic.step(); self.opt_ad.step(); self.opt_ar.step()
+            next_full_states = self.encode_state_records(
+                batch["next_full_states"]
+            )
+            target_value_next_full = self.critic(next_full_states)
 
-# ==============================
-# 可视化/输出
-# ==============================
+            common_target = (
+                    repair_rewards
+                    + self.gamma_repair
+                    * (1.0 - dones)
+                    * target_value_next_full
+            )
 
+        td_error_destroy = common_target - value_full
+        td_error_repair = common_target - value_partial
+
+        critic_loss_destroy = F.smooth_l1_loss(
+            value_full,
+            common_target
+        )
+
+        critic_loss_repair = F.smooth_l1_loss(
+            value_partial,
+            common_target
+        )
+
+        critic_loss = critic_loss_destroy + critic_loss_repair
+
+        advantage_destroy = self._normalize_advantage(td_error_destroy.detach()).clamp(-5.0, 5.0)
+        advantage_repair = self._normalize_advantage(td_error_repair.detach()).clamp(-5.0, 5.0)
+
+        destroy_logits = self.actor_destroy(full_states)
+        repair_logits = self.actor_repair(partial_states)
+
+        # 替换为：调用上面定义好的 _policy_distribution 生成带有保底概率的分布
+        destroy_distribution = self._policy_distribution(
+            destroy_logits
+        )
+
+        repair_distribution = self._policy_distribution(
+            repair_logits
+        )
+
+        destroy_log_prob = destroy_distribution.log_prob(destroy_actions).view(-1, 1)
+        repair_log_prob = repair_distribution.log_prob(repair_actions).view(-1, 1)
+
+        destroy_entropy = destroy_distribution.entropy().mean()
+        repair_entropy = repair_distribution.entropy().mean()
+
+        actor_destroy_loss = -(destroy_log_prob * advantage_destroy).mean() - entropy_coef * destroy_entropy
+        actor_repair_loss = -(repair_log_prob * advantage_repair).mean() - entropy_coef * repair_entropy
+
+        total_loss = self.critic_coef * critic_loss + actor_destroy_loss + actor_repair_loss
+
+        self.opt_enc.zero_grad()
+        self.opt_critic.zero_grad()
+        self.opt_ad.zero_grad()
+        self.opt_ar.zero_grad()
+
+        total_loss.backward()
+
+        encoder_grad_norm = self._grad_norm(self.encoder.parameters())
+        critic_grad_norm = self._grad_norm(self.critic.parameters())
+        destroy_grad_norm = self._grad_norm(self.actor_destroy.parameters())
+        repair_grad_norm = self._grad_norm(self.actor_repair.parameters())
+
+        torch.nn.utils.clip_grad_norm_(self.encoder.parameters(), max_norm=1.0)
+        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
+        torch.nn.utils.clip_grad_norm_(self.actor_destroy.parameters(), max_norm=1.0)
+        torch.nn.utils.clip_grad_norm_(self.actor_repair.parameters(), max_norm=1.0)
+
+        self.opt_enc.step()
+        self.opt_critic.step()
+        self.opt_ad.step()
+        self.opt_ar.step()
+
+        statistics = {
+            "total_loss": float(total_loss.detach().item()),
+            "critic_loss": float(critic_loss.detach().item()),
+            "destroy_actor_loss": float(actor_destroy_loss.detach().item()),
+            "repair_actor_loss": float(actor_repair_loss.detach().item()),
+            "destroy_entropy": float(destroy_entropy.detach().item()),
+            "repair_entropy": float(repair_entropy.detach().item()),
+            "destroy_td_abs": float(td_error_destroy.detach().abs().mean().item()),
+            "repair_td_abs": float(td_error_repair.detach().abs().mean().item()),
+            "encoder_grad_norm": encoder_grad_norm,
+            "critic_grad_norm": critic_grad_norm,
+            "destroy_grad_norm": destroy_grad_norm,
+            "repair_grad_norm": repair_grad_norm
+        }
+
+        rollout_buffer.clear()
+        return statistics
+
+# ---------------------- 状态 & 熵系数辅助 ---------------------- #
+def make_state_record(
+        graph,
+        stage,
+        destroy_ratio,
+        destroy_id,
+        progress,
+        temperature_ratio,
+        best_gap,
+        stagnation_ratio
+):
+    return (
+        graph,
+        int(stage),
+        float(destroy_ratio),
+        int(destroy_id),
+        float(np.clip(progress, 0.0, 1.0)),
+        float(np.clip(temperature_ratio, 0.0, 1.0)),
+        float(np.clip(best_gap, 0.0, 5.0)),
+        float(np.clip(stagnation_ratio, 0.0, 1.0))
+    )
+
+def encode_single_state(agent, state_record):
+    (
+        graph,
+        stage,
+        destroy_ratio,
+        destroy_id,
+        progress,
+        temperature_ratio,
+        best_gap,
+        stagnation_ratio
+    ) = state_record
+
+    return agent.build_state(
+        graph=graph,
+        stage=stage,
+        destroy_ratio=destroy_ratio,
+        destroy_id=destroy_id,
+        progress=progress,
+        temperature_ratio=temperature_ratio,
+        best_gap=best_gap,
+        stagnation_ratio=stagnation_ratio
+    )
+
+def get_entropy_coef(global_progress, entropy_start=0.01, entropy_end=0.001):
+    global_progress = float(np.clip(global_progress, 0.0, 1.0))
+    cosine_factor = 0.5 * (1.0 + math.cos(math.pi * global_progress))
+    return entropy_end + (entropy_start - entropy_end) * cosine_factor
+
+# ---------------------- 奖励函数重构 ---------------------- #
+def calculate_transition_reward(
+        current_obj,
+        candidate_obj,
+        best_obj_before,
+        best_obj_after,
+        initial_obj,
+        accepted,
+        current_weight=5.0,
+        best_weight=50.0,
+        reject_penalty=0.01
+):
+    scale = max(abs(float(initial_obj)), 1e-6)
+
+    # 评价候选解本身的质量，而不是回滚后的质量
+    candidate_gain = (
+        float(current_obj) - float(candidate_obj)
+    ) / scale
+    if candidate_gain < 0:
+        # 当解变差（负值）时，可以打折
+        penalty_gain = candidate_gain * 1
+    else:
+        # 当解变好（正值）时，保持原样，不打折
+        penalty_gain = candidate_gain
+    best_gain = (
+        float(best_obj_before) - float(best_obj_after)
+    ) / scale
+
+    reward = (
+        current_weight * penalty_gain
+        + best_weight * max(0.0, best_gain)
+    )
+
+    # 如果差解被拒绝，追加微小的额外拒绝惩罚，鼓励生成易被接受的解
+    if not accepted and candidate_obj > current_obj:
+        reward -= reject_penalty
+
+    return float(np.clip(reward, -1.0, 1.0))
+
+# ---------------------- 绘图辅助 ---------------------- #
 def plotObj(obj_list):
     try:
-        plt.figure(); plt.plot(np.arange(1, len(obj_list) + 1), obj_list)
-        plt.xlabel('Iterations'); plt.ylabel('Best Obj'); plt.grid(True, linestyle='--', linewidth=0.5)
-        plt.tight_layout(); plt.show()
+        plt.figure()
+        plt.plot(np.arange(1, len(obj_list) + 1), obj_list)
+        plt.xlabel('Iterations')
+        plt.ylabel('Obj Value')
+        plt.grid(True, linestyle='--', linewidth=0.5)
+        plt.tight_layout()
+        plt.show()
     except Exception:
         pass
 
-# ==============================
-# 主程序（Duel-Stage TD）
-# ==============================
-parser = argparse.ArgumentParser(description='DAC-ALNS for VRPTW (time windows aware)')
-parser.add_argument('file_path', type=str, help='CSV文件路径（含车场与所有客户）')
-parser.add_argument('result_file_path', type=str, help='结果聚合JSON目标路径（用于所在目录聚合/存模）')
-parser.add_argument('--knn_k', type=int, default=8, help='kNN 邻居数（静态基边）')
-parser.add_argument('--full_graph_knn', action='store_true', help='使用全连接图替代 kNN')
-parser.add_argument('--weight_mode', choices=['inv','dist'], default='inv', help='边权：inv(1/d) 或 dist(d)')
-parser.add_argument('--seed', type=int, default=0)
-parser.add_argument('--eps', type=float, default=0.10, help='epsilon-greedy 探索概率')
-parser.add_argument('--epochs', type=int, default=0, help='已废弃参数，仅为兼容')
-args = parser.parse_args()
+def plotRoutes(model: Model):
+    try:
+        plt.figure()
+        for route in model.best_sol.route_list:
+            xs, ys = [], []
+            for node_no in route:
+                xs.append(model.demand_dict[node_no].x_coord)
+                ys.append(model.demand_dict[node_no].y_coord)
+            plt.plot(xs, ys, marker='s', linewidth=0.8)
+        plt.tight_layout()
+        plt.show()
+    except Exception:
+        pass
 
-set_seed(args.seed)
 
-# 超参（可按实例规模调整）
-rand_d_max, rand_d_min = 0.4, 0.1
-worst_d_min, worst_d_max = 5, 20
-regret_n = 2
-r1, r2, r3 = 20, 10, -0.1
-rho = 0.6
-# T0 = 50.0
-phi = 0.995
 
-gamma = 0.9
-ent_coef = 0.01
 
-# 初始化模型
-model = Model()
-model.rand_d_max, model.rand_d_min = rand_d_max, rand_d_min
-model.worst_d_min, model.worst_d_max = worst_d_min, worst_d_max
-model.regret_n = regret_n
-model.r1, model.r2, model.r3 = r1, r2, r3
-model.rho = rho
-model.phi = phi
+# ---------------------- 主函数入口 ---------------------- #
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='DAC-ALNS-VRPTW Online On-Policy Solver')
+    parser.add_argument('--instance_path', type=str, required=True, help='单个实例(CSV)文件路径')
+    parser.add_argument('--result_path', type=str, required=True, help='结果文件路径')
+    parser.add_argument('--knn_k', type=int, default=5, help='kNN邻居数')
+    parser.add_argument('--full_graph_knn', action='store_true', help='使用全连接图替代kNN')
+    parser.add_argument('--weight_mode', choices=['inv', 'dist'], default='inv', help='边权计算模式')
+    parser.add_argument('--seed', type=int, default=0, help='随机种子')
+    parser.add_argument('--rollout_size', type=int, default=8, help='每次在线更新使用的 rollout 步数')
+    parser.add_argument(
+        '--pretrained_model_path',
+        type=str,
+        default=None,
+        help='兼容的预训练checkpoint；仅加载网络权重，随后继续在线更新'
+    )
+    parser.add_argument(
+        '--pretrained_lr_scale',
+        type=float,
+        default=1,
+        help='加载预训练模型后，Online版各学习率的缩放倍数（默认1）'
+    )
+    parser.add_argument(
+        '--online_model_path',
+        type=str,
+        default=None,
+        help='可选：保存本次在线适配后的checkpoint；不会覆盖预训练模型'
+    )
+    parser.add_argument(
+        '--num_steps',
+        type=int,
+        default=None,
+        help='ALNS迭代次数；默认 max(50 * 客户数, 2000)'
+    )
 
-read_single_csv(args.file_path, model)
-calDistanceTimeMatrix(model)
-validate_single_customer_feasible(model)
+    args = parser.parse_args()
+    set_seed(args.seed)
 
-# 初解
-sol = Sol()
-sol.node_no_seq = genInitialSol(model.demand_id_list)
-sol.obj, sol.route_list, sol.route_distance, sol.timetable_list = calObj(sol.node_no_seq, model)
-model.best_sol = copy.deepcopy(sol)
-model.T0 = sol.obj * 0.2
-# 图基边
-base_edge_index, base_edge_weight = precompute_base_graph(model, k_nn=args.knn_k, use_full_graph_knn=args.full_graph_knn, weight_mode=args.weight_mode)
+    if (
+        args.pretrained_model_path is not None
+        and args.online_model_path is not None
+        and Path(args.pretrained_model_path).resolve()
+        == Path(args.online_model_path).resolve()
+    ):
+        raise ValueError(
+            '--online_model_path 不能与 --pretrained_model_path 相同，'
+            '以免覆盖原始预训练模型。'
+        )
 
-# Agent（结点特征维度 = 10）
-agent = DACAgent(in_dim=10, enc_dim=64, extra_state_dim=2, hid=64, gamma=gamma, ent_coef=ent_coef).to(device)
+    gamma = 0.99
 
-history_best_obj = [sol.obj]
-start_time = time.time()
-# num_steps = max(50 * model.number_of_demands, 2000)
-num_steps = max(50 * model.number_of_demands, 2000)
-all_iterations = []
+    # 初始化单实例相关的环境
+    model = Model()
+    readCsvFile(args.instance_path, model)
+    calDistanceMatrix(model)
 
-for it in range(num_steps):
-    # 完整解状态
-    g_s = build_graph(sol, model, base_edge_index, base_edge_weight, removed_idx_set=None, include_path_edges=True)
-    s = agent.build_state(g_s, ratio=0.0, destroy_id=0)
+    nodes = [model.depot] + [model.demand_dict[nid] for nid in model.node_id_list]
 
-    # 破坏
-    a_d = agent.act_destroy(s, eps=args.eps); model.d_select[a_d] += 1
-    remove_list = doDestroy_by_id(a_d, model, sol)  # 位置索引列表
-    des_ratio = len(remove_list) / max(1, model.number_of_demands)
+    sol = Sol()
+    sol.node_no_seq = genInitialSol(model)
 
-    # 破坏后部分解
-    part_sol = apply_destroy_to_partial_sol(sol, remove_list, model)
-    removed_idx_set = set(model._id_to_idx[nid] for nid in sol.node_no_seq if nid not in part_sol.node_no_seq)
-    g_sd = build_graph(part_sol, model, base_edge_index, base_edge_weight, removed_idx_set=removed_idx_set, include_path_edges=True)
-    s_d = agent.build_state(g_sd, ratio=des_ratio, destroy_id=a_d)
+    # 首次运行通过时间窗 DP Split 建立显式可行路线，之后全部操作显式路线
+    (
+        sol.obj,
+        sol.route_list,
+        sol.route_distance,
+        sol.timetable_list
+    ) = calObj(sol.node_no_seq, model)
+    if not math.isfinite(sol.obj):
+        raise ValueError("无法构造满足容量和时间窗约束的初始解。")
 
-    # 修复
-    a_r = agent.act_repair(s_d, eps=args.eps); model.r_select[a_r] += 1
-    new_sol = doRepair_by_id(a_r, remove_list, model, sol)
+    model.best_sol = copy.deepcopy(sol)
 
-    # 新完整解状态
-    g_sp = build_graph(new_sol, model, base_edge_index, base_edge_weight, removed_idx_set=None, include_path_edges=True)
-    s_prime = agent.build_state(g_sp, ratio=des_ratio, destroy_id=a_d)
+    base_edge_index, base_edge_weight = precompute_base_graph(
+        nodes, model, k_nn=args.knn_k, use_full_graph_knn=args.full_graph_knn, weight_mode=args.weight_mode
+    )
 
-    # ----- 奖励（双阶段） -----
-    C_best, C_before, C_destroy, C_repair = model.best_sol.obj, sol.obj, part_sol.obj, new_sol.obj
-    impr_ratio_d = (C_best - C_destroy) / max(1e-6, C_best)
-    if C_best < C_destroy < C_before:
-        d_reward = model.alpha1 + model.beta * impr_ratio_d
-    elif C_destroy <= C_best:
-        d_reward = model.alpha2 + model.beta * impr_ratio_d
-    else:
-        d_reward = 0.0
+    agent = DACAgent(
+        enc_dim=64,
+        hid=64,
+        gamma_repair=gamma,
+        critic_coef=1.0
+    ).to(device)
 
-    f_rep_id = model.r_select[a_r]; f_max = max(1.0, model.r_select.max())
-    explore_bonus = model.delta * (1.0 - f_rep_id / f_max)
-    if C_repair < C_best:
-        r_reward = model.r1 + explore_bonus
-    elif C_best <= C_repair < C_before:
-        r_reward = model.r2 + explore_bonus
-    else:
-        r_reward = model.r3 + explore_bonus
+    pretrained_global_step = 0
+    if args.pretrained_model_path is not None:
+        pretrained_global_step = load_pretrained_checkpoint(
+            agent,
+            args.pretrained_model_path
+        )
+        scale_online_learning_rates(agent, args.pretrained_lr_scale)
+        print(
+            f"已加载预训练模型: {args.pretrained_model_path} | "
+            f"global_step={pretrained_global_step} | "
+            f"在线学习率缩放={args.pretrained_lr_scale:g}"
+        )
 
-    # ----- 接纳（退火） -----
-    accepted = False
-    if C_repair < C_before:
-        sol = copy.deepcopy(new_sol); accepted = True
-        if C_repair < model.best_sol.obj:
+    agent.train()
+
+    default_num_steps = max(50 * model.number_of_demands, 2000)
+    num_steps = args.num_steps if args.num_steps is not None else default_num_steps
+    if num_steps <= 0:
+        raise ValueError('--num_steps 必须为正整数。')
+    if args.rollout_size <= 0:
+        raise ValueError('--rollout_size 必须为正整数。')
+
+    initialization_mode = (
+        "预训练模型热启动"
+        if args.pretrained_model_path is not None
+        else "随机初始化"
+    )
+    print(f"VRPTW在线更新求解：{initialization_mode}，全量迭代 {num_steps} 步。")
+
+    rollout_buffer = RolloutBuffer()
+    rollout_size = args.rollout_size
+    model.T0 = 50
+    initial_temperature = float(model.T0)
+    stagnation_steps = 0
+    initial_obj = float(sol.obj)
+
+    recent_d_probs = []
+    recent_r_probs = []
+    window_size = 200
+
+    history_best_obj = [sol.obj]
+    return_list = []
+    start_time = time.time()
+    all_iterations = []
+
+    model.phi = (0.05 / initial_temperature) ** (1.0 / max(1, num_steps))
+
+    t_graph_build = 0.0
+    t_inference = 0.0
+    t_training = 0.0
+    online_update_count = 0
+
+    # ---------------------- 单算例主循环 (完全重构) ---------------------- #
+    for it in range(num_steps):
+        iteration_progress = it / max(1, num_steps - 1)
+        temperature_ratio = model.T0 / max(initial_temperature, 1e-6)
+        current_best_gap = (sol.obj - model.best_sol.obj) / max(abs(model.best_sol.obj), 1e-6)
+        stagnation_ratio = stagnation_steps / max(1, num_steps)
+
+        # =====================================================
+        # 1. 当前完整状态
+        # =====================================================
+        t0 = time.perf_counter()
+
+        g_s = build_graph(
+            sol,
+            nodes,
+            model,
+            base_edge_index,
+            base_edge_weight,
+            removed_set=None,
+            include_path_edges=True
+        )
+
+        full_state_record = make_state_record(
+            graph=g_s,
+            stage=0,
+            destroy_ratio=0.0,
+            destroy_id=-1,
+            progress=iteration_progress,
+            temperature_ratio=temperature_ratio,
+            best_gap=current_best_gap,
+            stagnation_ratio=stagnation_ratio
+        )
+
+        with torch.no_grad():
+            full_state_tensor = encode_single_state(agent, full_state_record)
+
+        t_graph_build += (time.perf_counter() - t0)
+
+        # =====================================================
+        # 2. Destroy Actor 选择算子
+        # =====================================================
+        t0 = time.perf_counter()
+        deterministic = False
+
+        a_d, d_prob = agent.act_destroy(
+            full_state_tensor,
+            deterministic=deterministic
+        )
+
+        t_inference += (time.perf_counter() - t0)
+        model.d_select[a_d] += 1
+
+        destroyed_routes, remove_list = doDestroy_by_id(a_d, model, sol, it, num_steps)
+        removed_set = set(remove_list)
+        destroy_ratio = len(remove_list) / max(1, len(model.node_id_list))
+
+        # =====================================================
+        # 3. 部分状态
+        # =====================================================
+        t0 = time.perf_counter()
+
+        part_sol = apply_destroy_to_partial_sol_explicit(destroyed_routes, model)
+        g_partial = build_graph(
+            part_sol,
+            nodes,
+            model,
+            base_edge_index,
+            base_edge_weight,
+            removed_set=removed_set,
+            include_path_edges=True
+        )
+
+        partial_state_record = make_state_record(
+            graph=g_partial,
+            stage=1,
+            destroy_ratio=destroy_ratio,
+            destroy_id=a_d,
+            progress=iteration_progress,
+            temperature_ratio=temperature_ratio,
+            best_gap=current_best_gap,
+            stagnation_ratio=stagnation_ratio
+        )
+
+        with torch.no_grad():
+            partial_state_tensor = encode_single_state(agent, partial_state_record)
+
+        t_graph_build += (time.perf_counter() - t0)
+
+
+        # =====================================================
+        # 4. Repair Actor 选择算子
+        # =====================================================
+        t0 = time.perf_counter()
+
+        a_r, r_prob = agent.act_repair(
+            partial_state_tensor,
+            deterministic=deterministic
+        )
+
+        t_inference += (time.perf_counter() - t0)
+        model.r_select[a_r] += 1
+
+        new_sol = doRepair_by_id(a_r, destroyed_routes, remove_list, model)
+
+        # =====================================================
+        # 5. 完整候选解奖励
+        # =====================================================
+        current_obj_before = float(sol.obj)
+        best_obj_before = float(model.best_sol.obj)
+        candidate_obj = float(new_sol.obj)
+
+        # 先做接受判断
+        if candidate_obj < current_obj_before:
+            accepted = True
+        else:
+            acceptance_probability = math.exp(
+                (current_obj_before - candidate_obj)
+                / max(model.T0, 1e-6)
+            )
+            accepted = acceptance_probability >= random.random()
+
+        if accepted:
+            sol = copy.deepcopy(new_sol)
+
+        # 更新最优
+        if candidate_obj < model.best_sol.obj:
             model.best_sol = copy.deepcopy(new_sol)
-    elif math.exp((C_before - C_repair) / max(model.T0, 1e-3)) >= random.random():
-        sol = copy.deepcopy(new_sol); accepted = True
+            found_new_best = True
+            stagnation_steps = 0
+        else:
+            found_new_best = False
+            stagnation_steps += 1
 
-    g_next = g_sp if accepted else g_s
-    s_next = agent.build_state(g_next, ratio=des_ratio, destroy_id=a_d)
+        next_obj = float(sol.obj)
+        best_obj_after = float(model.best_sol.obj)
+        destroy_reward = 0.0
 
-    d_trans = {'states':[s], 'actions':[a_d], 'rewards':[d_reward], 'next_states':[s_d], 'dones':[0.0]}
-    r_trans = {'states':[s_d], 'actions':[a_r], 'rewards':[r_reward], 'next_states':[s_next], 'dones':[1.0]}
+        repair_reward = calculate_transition_reward(
+            current_obj=current_obj_before,
+            candidate_obj=candidate_obj,
+            best_obj_before=best_obj_before,
+            best_obj_after=best_obj_after,
+            initial_obj=initial_obj,
+            accepted=accepted
+        )
 
-    model.T0 *= model.phi
-    agent.update(d_trans, r_trans)
+        # =====================================================
+        # 7. 实际下一完整状态
+        # =====================================================
+        if accepted:
+            next_graph = build_graph(
+                sol,
+                nodes,
+                model,
+                base_edge_index,
+                base_edge_weight,
+                removed_set=None,
+                include_path_edges=True
+            )
+        else:
+            next_graph = g_s
 
-    # 日志
+        model.T0 *= model.phi
+
+        next_progress = (it + 1) / max(1, num_steps - 1)
+        next_temperature_ratio = model.T0 / max(initial_temperature, 1e-6)
+        next_best_gap = (sol.obj - model.best_sol.obj) / max(abs(model.best_sol.obj), 1e-6)
+        next_stagnation_ratio = stagnation_steps / max(1, num_steps)
+        is_terminal = float(it == num_steps - 1)
+
+        next_full_state_record = make_state_record(
+            graph=next_graph,
+            stage=0,
+            destroy_ratio=0.0,
+            destroy_id=-1,
+            progress=next_progress,
+            temperature_ratio=next_temperature_ratio,
+            best_gap=next_best_gap,
+            stagnation_ratio=next_stagnation_ratio
+        )
+
+        # =====================================================
+        # 8. 保存 on-policy rollout
+        # =====================================================
+        rollout_buffer.add(
+            full_state=full_state_record,
+            destroy_action=a_d,
+            partial_state=partial_state_record,
+            repair_action=a_r,
+            repair_reward=repair_reward,
+            next_full_state=next_full_state_record,
+            done=is_terminal
+        )
+
+        return_list.append(destroy_reward)
+        return_list.append(repair_reward)
+
+        recent_d_probs.append(d_prob)
+        recent_r_probs.append(r_prob)
+
+        if len(recent_d_probs) > window_size:
+            recent_d_probs = recent_d_probs[-window_size:]
+        if len(recent_r_probs) > window_size:
+            recent_r_probs = recent_r_probs[-window_size:]
+
+        # =====================================================
+        # 9. Rollout 触发参数更新
+        # =====================================================
+        should_update = len(rollout_buffer) >= rollout_size or is_terminal > 0.5
+
+        if should_update:
+            t0 = time.perf_counter()
+            entropy_coef = get_entropy_coef(
+                global_progress=iteration_progress,
+                entropy_start=0.01,
+                entropy_end=0.001
+            )
+
+            update_statistics = agent.update_rollout(
+                rollout_buffer,
+                entropy_coef=entropy_coef
+            )
+            t_training += (time.perf_counter() - t0)
+
+            if update_statistics is not None:
+                online_update_count += 1
+                # print(
+                #     f"[VRPTW Online DUEL-AC Update {online_update_count}] "
+                #     f"Loss={update_statistics['total_loss']:.4f} | "
+                #     f"Critic={update_statistics['critic_loss']:.4f} | "
+                #     f"Entropy D/R={update_statistics['destroy_entropy']:.4f}/{update_statistics['repair_entropy']:.4f} | "
+                #     f"TD D/R={update_statistics['destroy_td_abs']:.4f}/{update_statistics['repair_td_abs']:.4f} | "
+                #     f"Grad Enc/Critic/D/R="
+                #     f"{update_statistics['encoder_grad_norm']:.4f}/"
+                #     f"{update_statistics['critic_grad_norm']:.4f}/"
+                #     f"{update_statistics['destroy_grad_norm']:.4f}/"
+                #     f"{update_statistics['repair_grad_norm']:.4f}"
+                # )
+
+        history_best_obj.append(model.best_sol.obj)
+
+        # ---------------------- 打印与记录 ---------------------- #
+        if (it + 1) % 200 == 0:
+            avg_d_prob = np.mean(recent_d_probs, axis=0)
+            avg_r_prob = np.mean(recent_r_probs, axis=0)
+            d_prob_str = ", ".join(f"{probability:.3f}" for probability in avg_d_prob)
+            r_prob_str = ", ".join(f"{probability:.3f}" for probability in avg_r_prob)
+
+            # print(
+            #     f"{Path(args.instance_path).name} | "
+            #     f"Iter {it + 1}/{num_steps} | "
+            #     f"Best Obj: {model.best_sol.obj:.2f} | "
+            #     f"Current Obj: {sol.obj:.2f} | "
+            #     f"Time: {time.time() - start_time:.2f}s"
+            # )
+            # print(f"    [Rolling Monitor] Avg Destroy Probs: [{d_prob_str}]")
+            # print(f"    [Rolling Monitor] Avg Repair Probs:  [{r_prob_str}]")
+
+        if (it + 1) % 10 == 0:
+            all_iterations.append({
+                "iteration": it + 1,
+                "file_path": args.instance_path,
+                "best_obj": round(model.best_sol.obj, 2),
+                "current_obj": round(sol.obj, 2),
+                "repair_reward": round(repair_reward, 6),
+                "accepted": bool(accepted),
+                "new_best": bool(found_new_best),
+                "run_time": round(time.time() - start_time, 2),
+                "destroy_op1": float(model.d_select[0]),
+                "destroy_op2": float(model.d_select[1]),
+                "destroy_op3": float(model.d_select[2]),
+                "destroy_op4": float(model.d_select[3]),
+                "destroy_op5": float(model.d_select[4]),
+                "repair_op1": float(model.r_select[0]),
+                "repair_op2": float(model.r_select[1]),
+                "repair_op3": float(model.r_select[2]),
+                "repair_op4": float(model.r_select[3]),
+                "repair_op5": float(model.r_select[4])
+            })
+
+    # ---------------------- 统计时间开销 ---------------------- #
     run_time = time.time() - start_time
-    history_best_obj.append(model.best_sol.obj)
-    # if (it+1) % 100 == 0:
-    if (it + 1) % 1 == 0:
-        print(f"{Path(args.file_path).name} | Iter {it+1}/{num_steps} | Best Obj: {model.best_sol.obj:.2f} | Time: {run_time:.2f}s")
-    if (it+1) % 10 == 0:
-        all_iterations.append({
-            'iteration': it+1,
-            'file_path': args.file_path,
-            'best_obj': round(model.best_sol.obj, 2),
-            'run_time': round(run_time, 2),
-            'rand_des': float(model.d_select[0]),
-            'wors_des': float(model.d_select[1]),
-            'rand_rep': float(model.r_select[0]),
-            'gree_rep': float(model.r_select[1]),
-            'regr_rep': float(model.r_select[2]),
-        })
+    nn_total_extra = t_graph_build + t_inference + t_training
+    nn_percentage = (nn_total_extra / max(run_time, 1e-6)) * 100
 
-# 收尾：聚合/存模
-parent_path = Path(args.result_file_path).parent
-parts = Path(args.result_file_path).parts
-file_name = Path(args.result_file_path).stem
-log_dir = parent_path / 'LOG'; log_dir.mkdir(parents=True, exist_ok=True)
-log_file_path = log_dir / f'{file_name}_iteration_log_{round(model.best_sol.obj, 2)}_{round(run_time, 2)}.json'
-with open(log_file_path, 'w', encoding='utf-8') as f:
-    json.dump(all_iterations, f, indent=4, ensure_ascii=False)
+    excel_record = {
+        "Instance": Path(args.instance_path).name,
+        "Best_Obj": round(model.best_sol.obj, 2),
+        "Total_Time(s)": round(run_time, 2),
+        "NN_Graph_Build(s)": round(t_graph_build, 3),
+        "NN_Inference(s)": round(t_inference, 3),
+        "NN_Training(s)": round(t_training, 3),
+        "NN_Total_Extra(s)": round(nn_total_extra, 3),
+        "NN_Overhead_Ratio(%)": round(nn_percentage, 2),
+        "Problem": "VRPTW",
+        "Node_Feature_Dim": NODE_FEATURE_DIM,
+        "Initialization": initialization_mode,
+        "Pretrained_Model": args.pretrained_model_path or "",
+        "Pretrained_LR_Scale": (
+            args.pretrained_lr_scale
+            if args.pretrained_model_path is not None
+            else ""
+        ),
+        "Online_Updates": online_update_count,
+        "Rollout_Size": rollout_size,
+        "Iterations": num_steps,
+        "Device": str(device)
+    }
 
-try:
-    result_path = parent_path / f'{parts[-2]}_result.json'
-    data = {}
-    if result_path.exists():
-        try:
-            with open(result_path, 'r', encoding='utf-8') as fr: data = json.load(fr)
-        except json.JSONDecodeError: pass
-    problem = data.setdefault(file_name, {"objectives": [], "times": []})
-    problem["objectives"].append(round(model.best_sol.obj, 2)); problem["times"].append(round(run_time, 2))
-    with open(result_path, 'w', encoding='utf-8') as fw: json.dump(data, fw, ensure_ascii=False, indent=2)
-except IndexError:
-    pass
+    # ---------------------- 收尾与文件输出 ---------------------- #
+    parent_path = Path(args.result_path).parent
+    parent_path.mkdir(parents=True, exist_ok=True)
+    parts = Path(args.result_path).parts
+    file_name = Path(args.result_path).stem
 
-try:
-    model_dir = parent_path.parent.parent / 'SavedModel' / parts[-2]
-    model_dir.mkdir(parents=True, exist_ok=True)
-    model_save_path = model_dir / f'{file_name}_model_{round(model.best_sol.obj, 2)}.pth'
-    torch.save(agent.state_dict(), model_save_path)
-except Exception:
-    model_save_path = Path(f'./{file_name}_model_{round(model.best_sol.obj, 2)}.pth')
-    torch.save(agent.state_dict(), model_save_path)
+    csv_summary_path = parent_path / "DAC_ALNS_VRPTW_Summary_Results.csv"
+    save_to_csv(csv_summary_path, excel_record)
 
-print("\n--- Final Statistics ---")
-print(f"Best Objective Found: {model.best_sol.obj:.2f}")
-print(f"Total Run Time: {run_time:.2f}s")
-print(f"Random Destroy Selections: {model.d_select[0]}")
-print(f"Worse Destroy Selections:  {model.d_select[1]}")
-print(f"Random Repair Selections:  {model.r_select[0]}")
-print(f"Greedy Repair Selections:  {model.r_select[1]}")
-print(f"Regret  Repair Selections: {model.r_select[2]}")
-print("------------------------\n")
+    log_dir = parent_path / 'LOG'
+    log_dir.mkdir(exist_ok=True)
+    log_file_path = log_dir / f'{file_name}_iteration_log_{round(model.best_sol.obj, 2)}_{round(run_time, 2)}.json'
+    with open(log_file_path, 'w', encoding='utf-8') as f:
+        json.dump(all_iterations, f, indent=4, ensure_ascii=False)
+
+    try:
+        result_path = parent_path / f'{parts[-2]}_result.json'
+        safe_append_to_json(result_path, file_name, round(model.best_sol.obj, 2), round(run_time, 2))
+    except IndexError:
+        print("Warn: result aggregation path not found; skip.")
+
+    if args.online_model_path is not None:
+        save_online_checkpoint(
+            agent,
+            args.online_model_path,
+            global_step=pretrained_global_step + num_steps
+        )
+        print(f"在线适配模型已保存至: {args.online_model_path}")
+
+    print("\n--- Final Statistics ---")
+    print(f"Best Objective Found: {model.best_sol.obj:.2f}")
+    print(f"Total Run Time: {run_time:.2f}s")
+    print(f"Online Parameter Updates: {online_update_count}")
+    print(f"Neural Network Overhead Ratio: {nn_percentage:.2f}%")
+    print(f"Destroy Op 1 Selections (Random):  {model.d_select[0]}")
+    print(f"Destroy Op 2 Selections (Worst):   {model.d_select[1]}")
+    print(f"Destroy Op 3 Selections (Shaw):    {model.d_select[2]}")
+    print(f"Destroy Op 4 Selections (SISR):    {model.d_select[3]}")
+    print(f"Destroy Op 5 Selections (CritTW):  {model.d_select[4]}")
+    print(f"Repair  Op 1 Selections (RndBest): {model.r_select[0]}")
+    print(f"Repair  Op 2 Selections (Regret):  {model.r_select[1]}")
+    print(f"Repair  Op 3 Selections (Cheap):   {model.r_select[2]}")
+    print(f"Repair  Op 4 Selections (Regret3): {model.r_select[3]}")
+    print(f"Repair  Op 5 Selections (TWDelay): {model.r_select[4]}")
+    print("------------------------\n")
