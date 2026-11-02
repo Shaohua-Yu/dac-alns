@@ -1,0 +1,3 @@
+﻿experiment,problem,methods,expected_blocks,complete_blocks,status,statistic,p_raw,interpretation
+E1,CVRP,"ALNS,AC,DAC-Pre,DAC-Partial",122,122,complete,62.422314049587015,1.784736572505366e-13,secondary omnibus test; paired families are the registered inferential endpoints
+E1,VRPTW,"ALNS,AC,DAC-Pre,DAC-Partial",56,56,complete,65.51520912547531,3.8917741768397824e-14,secondary omnibus test; paired families are the registered inferential endpoints

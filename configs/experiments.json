@@ -1,0 +1,40 @@
+{
+  "seeds": [
+    0,
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+  ],
+  "time_budgets_seconds": {
+    "CVRP-S": 30,
+    "CVRP-M1": 160,
+    "CVRP-M2": 1010,
+    "C": 300,
+    "R": 280,
+    "RC": 350,
+    "CVRP-L": 4320
+  },
+  "iteration_budget_rule": "max(2000, 50 * n_customers)",
+  "distance": "unrounded Euclidean",
+  "objective": "total distance; fleet is nonbinding",
+  "controlled_operator_counts": {
+    "destroy": 5,
+    "repair": 5
+  },
+  "device": "cpu",
+  "threads_per_trial": 1,
+  "comparison_rows": {
+    "full_revision": 20120,
+    "equal_iterations": 5340,
+    "time_only": 3560
+  },
+  "distinct_formal_executions": 25810,
+  "initialization": "Formal VRPTW neural runs used pretrained checkpoints; run.py defaults to random initialization. Checkpoints are omitted from this slim release.",
+  "time_only_baselines": "Native DR iteration stop and Wang iteration/stop-action termination disabled; original checkpoints unchanged."
+}

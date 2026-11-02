@@ -1,0 +1,8 @@
+{
+  "job_id": "transfer_cvrp",
+  "mode": "source",
+  "problem": "CVRP",
+  "method": "DAC-Partial",
+  "training_seed": 525252,
+  "slot": 46
+}

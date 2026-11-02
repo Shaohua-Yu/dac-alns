@@ -1,0 +1,8 @@
+{
+  "job_id": "light_ac",
+  "mode": "light",
+  "problem": "VRPTW",
+  "method": "AC",
+  "training_seed": 424242,
+  "slot": 22
+}

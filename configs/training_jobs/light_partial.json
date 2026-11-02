@@ -1,0 +1,8 @@
+{
+  "job_id": "light_partial",
+  "mode": "light",
+  "problem": "VRPTW",
+  "method": "DAC-Partial",
+  "training_seed": 424242,
+  "slot": 45
+}

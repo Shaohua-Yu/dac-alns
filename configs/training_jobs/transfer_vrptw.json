@@ -1,0 +1,8 @@
+{
+  "job_id": "transfer_vrptw",
+  "mode": "source",
+  "problem": "VRPTW",
+  "method": "DAC-Partial",
+  "training_seed": 626262,
+  "slot": 47
+}

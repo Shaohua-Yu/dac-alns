@@ -1,0 +1,1426 @@
+[
+  {
+    "problem": "CVRP",
+    "id": "A-n32-k5",
+    "group": "CVRP-S",
+    "n_customers": 31,
+    "path": "instances/CVRP/A-n32-k5.csv",
+    "sha256": "0b0948f9a7acf9ae247374ee1119cdb3786b7dbe52585cefeb20793f19fe5853"
+  },
+  {
+    "problem": "CVRP",
+    "id": "A-n33-k5",
+    "group": "CVRP-S",
+    "n_customers": 32,
+    "path": "instances/CVRP/A-n33-k5.csv",
+    "sha256": "a36d5991775e783c05ea276fef3e735e89c5381ed1e71b20480e0eb97b68c0a7"
+  },
+  {
+    "problem": "CVRP",
+    "id": "A-n33-k6",
+    "group": "CVRP-S",
+    "n_customers": 32,
+    "path": "instances/CVRP/A-n33-k6.csv",
+    "sha256": "cea86afeade1dc6e0765db39be64037f23a76a37b08fa11b5bcffdec70c86097"
+  },
+  {
+    "problem": "CVRP",
+    "id": "A-n34-k5",
+    "group": "CVRP-S",
+    "n_customers": 33,
+    "path": "instances/CVRP/A-n34-k5.csv",
+    "sha256": "e004fedb6801409cdee080852fa8e450b73915fd93a86009a6db195d79a9c655"
+  },
+  {
+    "problem": "CVRP",
+    "id": "A-n37-k5",
+    "group": "CVRP-S",
+    "n_customers": 36,
+    "path": "instances/CVRP/A-n37-k5.csv",
+    "sha256": "2cfe9e01aed3d495fbe9dd18c00746fe906f87d43b10162cd41b05cb692251bd"
+  },
+  {
+    "problem": "CVRP",
+    "id": "A-n37-k6",
+    "group": "CVRP-S",
+    "n_customers": 36,
+    "path": "instances/CVRP/A-n37-k6.csv",
+    "sha256": "5a6e0a9d200eda4b715b1cb52cbaa271c116befc51d9bbb29110d2e1f1b63d5f"
+  },
+  {
+    "problem": "CVRP",
+    "id": "A-n39-k6",
+    "group": "CVRP-S",
+    "n_customers": 38,
+    "path": "instances/CVRP/A-n39-k6.csv",
+    "sha256": "33a8e9dac03c34c32818ae65dcb0224fc73cd86494c03433e7f5ed24c4c863fb"
+  },
+  {
+    "problem": "CVRP",
+    "id": "A-n45-k6",
+    "group": "CVRP-S",
+    "n_customers": 44,
+    "path": "instances/CVRP/A-n45-k6.csv",
+    "sha256": "e7bad9bbf611376729245f30df17ef66026ee1efda3fc663881d7d2bbd45cbab"
+  },
+  {
+    "problem": "CVRP",
+    "id": "A-n45-k7",
+    "group": "CVRP-S",
+    "n_customers": 44,
+    "path": "instances/CVRP/A-n45-k7.csv",
+    "sha256": "9580b084ae22a0c41169f990109e1ee4a17bad99cce938d403cecf71be8f1aaa"
+  },
+  {
+    "problem": "CVRP",
+    "id": "A-n53-k7",
+    "group": "CVRP-S",
+    "n_customers": 52,
+    "path": "instances/CVRP/A-n53-k7.csv",
+    "sha256": "b38eb20febadc9ef94a5e801cdb4e26ebe95972df645718d0ff3c6bbe013a231"
+  },
+  {
+    "problem": "CVRP",
+    "id": "A-n54-k7",
+    "group": "CVRP-S",
+    "n_customers": 53,
+    "path": "instances/CVRP/A-n54-k7.csv",
+    "sha256": "246453bb426ebd0bd09657932a85905ba2ede098dbcdad79ee2e750475a4b1ef"
+  },
+  {
+    "problem": "CVRP",
+    "id": "A-n55-k9",
+    "group": "CVRP-S",
+    "n_customers": 54,
+    "path": "instances/CVRP/A-n55-k9.csv",
+    "sha256": "286eb280df61940ac4a12cc16986210675cb57ce590b31edb33b13ac410ae027"
+  },
+  {
+    "problem": "CVRP",
+    "id": "A-n61-k9",
+    "group": "CVRP-S",
+    "n_customers": 60,
+    "path": "instances/CVRP/A-n61-k9.csv",
+    "sha256": "e64c7530a01a839de7551054b22e5d1434c4fffdf3856a56f08a4ff65f3112fe"
+  },
+  {
+    "problem": "CVRP",
+    "id": "A-n62-k8",
+    "group": "CVRP-S",
+    "n_customers": 61,
+    "path": "instances/CVRP/A-n62-k8.csv",
+    "sha256": "75a3a371d9cf12dcc809d64709f07931b91dd370e42d40ee1e830a28abd800a3"
+  },
+  {
+    "problem": "CVRP",
+    "id": "A-n63-k10",
+    "group": "CVRP-S",
+    "n_customers": 62,
+    "path": "instances/CVRP/A-n63-k10.csv",
+    "sha256": "d3aeeadc1bda02b9728fdbfb0495ce6fcceeac9a8a1c77e258da961b59638cde"
+  },
+  {
+    "problem": "CVRP",
+    "id": "A-n63-k9",
+    "group": "CVRP-S",
+    "n_customers": 62,
+    "path": "instances/CVRP/A-n63-k9.csv",
+    "sha256": "fb67ce1725391d692715b99c0674a71d1c248116dc2f86549e36761b05dde558"
+  },
+  {
+    "problem": "CVRP",
+    "id": "A-n64-k9",
+    "group": "CVRP-S",
+    "n_customers": 63,
+    "path": "instances/CVRP/A-n64-k9.csv",
+    "sha256": "02540d0eb1c2c153c646f6a8cdbe8123cf998e7d02e7df9f27ee387d0296bd0e"
+  },
+  {
+    "problem": "CVRP",
+    "id": "A-n65-k9",
+    "group": "CVRP-S",
+    "n_customers": 64,
+    "path": "instances/CVRP/A-n65-k9.csv",
+    "sha256": "bdee656bb8eeff1a5d18e794fb92da53159b08a1c61212e062284a4fc3f05398"
+  },
+  {
+    "problem": "CVRP",
+    "id": "A-n69-k9",
+    "group": "CVRP-S",
+    "n_customers": 68,
+    "path": "instances/CVRP/A-n69-k9.csv",
+    "sha256": "05b7af4c90a09134061ff7d9b8fbb107644b80ff39e54b4903faef4e908a8957"
+  },
+  {
+    "problem": "CVRP",
+    "id": "A-n80-k10",
+    "group": "CVRP-S",
+    "n_customers": 79,
+    "path": "instances/CVRP/A-n80-k10.csv",
+    "sha256": "69cf36eb69d570c7b82c88dfcbd0a822d627f6d2601682d5ccc4ac1066028adc"
+  },
+  {
+    "problem": "CVRP",
+    "id": "B-n34-k5",
+    "group": "CVRP-S",
+    "n_customers": 33,
+    "path": "instances/CVRP/B-n34-k5.csv",
+    "sha256": "93fa0f67730fbca65cc4248ccbc4d748ce0e529f1b04febbcc9b5204b57ba9de"
+  },
+  {
+    "problem": "CVRP",
+    "id": "B-n35-k5",
+    "group": "CVRP-S",
+    "n_customers": 34,
+    "path": "instances/CVRP/B-n35-k5.csv",
+    "sha256": "fb5d891d5e1b1426c53a518e031b57e3c79dbac962675df83efc9a11caec69ee"
+  },
+  {
+    "problem": "CVRP",
+    "id": "B-n39-k5",
+    "group": "CVRP-S",
+    "n_customers": 38,
+    "path": "instances/CVRP/B-n39-k5.csv",
+    "sha256": "1af34096d814a5fe8d40fd97b7756656deb6b08906dfd074069cbe143e8e6b88"
+  },
+  {
+    "problem": "CVRP",
+    "id": "B-n41-k6",
+    "group": "CVRP-S",
+    "n_customers": 40,
+    "path": "instances/CVRP/B-n41-k6.csv",
+    "sha256": "29d5f0f97a0f8c73d18e2444aa5c41fae51843af3a39331023b47e51a0ee5a39"
+  },
+  {
+    "problem": "CVRP",
+    "id": "B-n43-k6",
+    "group": "CVRP-S",
+    "n_customers": 42,
+    "path": "instances/CVRP/B-n43-k6.csv",
+    "sha256": "b488d1c540e8565ca0d9adbf0a8cec4db3fff4766410ccd7d410406d97e02ea0"
+  },
+  {
+    "problem": "CVRP",
+    "id": "B-n45-k5",
+    "group": "CVRP-S",
+    "n_customers": 44,
+    "path": "instances/CVRP/B-n45-k5.csv",
+    "sha256": "be618c5f91403c60343b842b9dcd9f6e9aef9daca74143cbb947864bccb42173"
+  },
+  {
+    "problem": "CVRP",
+    "id": "B-n52-k7",
+    "group": "CVRP-S",
+    "n_customers": 51,
+    "path": "instances/CVRP/B-n52-k7.csv",
+    "sha256": "93be3dc77c3b6082b20537ef588565d090e1e1105a1f876e88bbb55921b8b97e"
+  },
+  {
+    "problem": "CVRP",
+    "id": "B-n56-k7",
+    "group": "CVRP-S",
+    "n_customers": 55,
+    "path": "instances/CVRP/B-n56-k7.csv",
+    "sha256": "b719e42857754d934a7b0abd45d0a53e0da8058c49fd505cade4237f60f8d355"
+  },
+  {
+    "problem": "CVRP",
+    "id": "B-n57-k7",
+    "group": "CVRP-S",
+    "n_customers": 56,
+    "path": "instances/CVRP/B-n57-k7.csv",
+    "sha256": "b3ce6c25964cc868410e7cccd9f868062a5fbe1e0e1c67a11813031f72c3c7ce"
+  },
+  {
+    "problem": "CVRP",
+    "id": "B-n57-k9",
+    "group": "CVRP-S",
+    "n_customers": 56,
+    "path": "instances/CVRP/B-n57-k9.csv",
+    "sha256": "f401f2a487c1ad73b0d00ee5d1c54d0cc22df9ac3027d0ac3fdcc4bcbeb45b9b"
+  },
+  {
+    "problem": "CVRP",
+    "id": "B-n63-k10",
+    "group": "CVRP-S",
+    "n_customers": 62,
+    "path": "instances/CVRP/B-n63-k10.csv",
+    "sha256": "1c4e1a8cfb6c60d620a0c336f6734d7ea3e48580677dd26f65597f3a8e4fd1bd"
+  },
+  {
+    "problem": "CVRP",
+    "id": "B-n64-k9",
+    "group": "CVRP-S",
+    "n_customers": 63,
+    "path": "instances/CVRP/B-n64-k9.csv",
+    "sha256": "a3356f265565a5db7ffb978b454740528fa8d856e1fd6d0ed12cdd5795ae7070"
+  },
+  {
+    "problem": "CVRP",
+    "id": "B-n66-k9",
+    "group": "CVRP-S",
+    "n_customers": 65,
+    "path": "instances/CVRP/B-n66-k9.csv",
+    "sha256": "dd0137025f6bcb532eae36d116b7bda0d5796263d5fbc2ed7be82bde00dc2db2"
+  },
+  {
+    "problem": "CVRP",
+    "id": "B-n67-k10",
+    "group": "CVRP-S",
+    "n_customers": 66,
+    "path": "instances/CVRP/B-n67-k10.csv",
+    "sha256": "c5e7becb7345e444e52b0b4a8d17f1652db806a69878acc6038bef5cdc9c7791"
+  },
+  {
+    "problem": "CVRP",
+    "id": "B-n68-k9",
+    "group": "CVRP-S",
+    "n_customers": 67,
+    "path": "instances/CVRP/B-n68-k9.csv",
+    "sha256": "3cbcad66f720e394101c7cd9d3b6a9fa72d34001123f6dcd59f4058f46694a5e"
+  },
+  {
+    "problem": "CVRP",
+    "id": "B-n78-k10",
+    "group": "CVRP-S",
+    "n_customers": 77,
+    "path": "instances/CVRP/B-n78-k10.csv",
+    "sha256": "d1d49ffcfe52a91a1c09b5a78e9ff1d3d53ab378276d6a982197bf33b2920175"
+  },
+  {
+    "problem": "CVRP",
+    "id": "P-n16-k8",
+    "group": "CVRP-S",
+    "n_customers": 15,
+    "path": "instances/CVRP/P-n16-k8.csv",
+    "sha256": "afb69efe7bf86e8f525a7ce2e69f3e17108aa310de741321ab200286dc659e60"
+  },
+  {
+    "problem": "CVRP",
+    "id": "P-n19-k2",
+    "group": "CVRP-S",
+    "n_customers": 18,
+    "path": "instances/CVRP/P-n19-k2.csv",
+    "sha256": "37f9840740db6d65a5c31364b1d5bb2c651a4104df931e1960d3a3702266fdc1"
+  },
+  {
+    "problem": "CVRP",
+    "id": "P-n20-k2",
+    "group": "CVRP-S",
+    "n_customers": 19,
+    "path": "instances/CVRP/P-n20-k2.csv",
+    "sha256": "24c4a191e802f2a3589207ab5010d3aaa496d9b87fe275200bbdb59e2a371858"
+  },
+  {
+    "problem": "CVRP",
+    "id": "P-n21-k2",
+    "group": "CVRP-S",
+    "n_customers": 20,
+    "path": "instances/CVRP/P-n21-k2.csv",
+    "sha256": "37417246826357613f6eec22313f869c0ebb204222db8eadcc0000dcbed5f39c"
+  },
+  {
+    "problem": "CVRP",
+    "id": "P-n22-k2",
+    "group": "CVRP-S",
+    "n_customers": 21,
+    "path": "instances/CVRP/P-n22-k2.csv",
+    "sha256": "77319d56b3e74cb7fd6592f4dfcc20dc4ac1497bc70f8e44b4f7f691e1305b0f"
+  },
+  {
+    "problem": "CVRP",
+    "id": "P-n22-k8",
+    "group": "CVRP-S",
+    "n_customers": 21,
+    "path": "instances/CVRP/P-n22-k8.csv",
+    "sha256": "fbbccecf4dda40499fc11b615f0c9fe90f26307c4cc840e5574d229ecea7f375"
+  },
+  {
+    "problem": "CVRP",
+    "id": "P-n23-k8",
+    "group": "CVRP-S",
+    "n_customers": 22,
+    "path": "instances/CVRP/P-n23-k8.csv",
+    "sha256": "2394924139e17c2b1262d6a99243de8c3c7d1880251858e6112d91aac8aab0f0"
+  },
+  {
+    "problem": "CVRP",
+    "id": "P-n40-k5",
+    "group": "CVRP-S",
+    "n_customers": 39,
+    "path": "instances/CVRP/P-n40-k5.csv",
+    "sha256": "c3cb7c041f77c49861f3db995783ba11e1c58db084ade0b5347037d44e34571b"
+  },
+  {
+    "problem": "CVRP",
+    "id": "P-n45-k5",
+    "group": "CVRP-S",
+    "n_customers": 44,
+    "path": "instances/CVRP/P-n45-k5.csv",
+    "sha256": "ccde9e6abc929f8b8086fc602a1e555e927d9eb019c35d21d370021cea8033c2"
+  },
+  {
+    "problem": "CVRP",
+    "id": "P-n50-k8",
+    "group": "CVRP-S",
+    "n_customers": 49,
+    "path": "instances/CVRP/P-n50-k8.csv",
+    "sha256": "1f3d784bacc760e91451ca0ef4041e58ab42e75c8d3e0019718f1f6f3d87a60a"
+  },
+  {
+    "problem": "CVRP",
+    "id": "P-n51-k10",
+    "group": "CVRP-S",
+    "n_customers": 50,
+    "path": "instances/CVRP/P-n51-k10.csv",
+    "sha256": "a9354296e71511569cf47bcd1898787738601be789171efc8fcecf0643c06a71"
+  },
+  {
+    "problem": "CVRP",
+    "id": "P-n55-k10",
+    "group": "CVRP-S",
+    "n_customers": 54,
+    "path": "instances/CVRP/P-n55-k10.csv",
+    "sha256": "ae0f8fe3c1952c7c60c6502438c0fd37c503168d2fb9b2f22be6a9eb662f730f"
+  },
+  {
+    "problem": "CVRP",
+    "id": "P-n55-k8",
+    "group": "CVRP-S",
+    "n_customers": 54,
+    "path": "instances/CVRP/P-n55-k8.csv",
+    "sha256": "14f400341cf36fe0c66878277a548de22b64e5ef6a3d9cffa9ff1dab8ee7eedd"
+  },
+  {
+    "problem": "CVRP",
+    "id": "P-n60-k10",
+    "group": "CVRP-S",
+    "n_customers": 59,
+    "path": "instances/CVRP/P-n60-k10.csv",
+    "sha256": "63104e5944df91eff9a6caa73dcd03330abdd671c082b660c25c6d2573f596e8"
+  },
+  {
+    "problem": "CVRP",
+    "id": "P-n65-k10",
+    "group": "CVRP-S",
+    "n_customers": 64,
+    "path": "instances/CVRP/P-n65-k10.csv",
+    "sha256": "02db0f52af8baeee62cc6fdc18283548e6de445d376872d503ff72842c787804"
+  },
+  {
+    "problem": "CVRP",
+    "id": "P-n70-k10",
+    "group": "CVRP-S",
+    "n_customers": 69,
+    "path": "instances/CVRP/P-n70-k10.csv",
+    "sha256": "605f16e0a7f2534fe3f9ab79f11c47bcfbfc6767b62aa40526dea38c1ac896e5"
+  },
+  {
+    "problem": "CVRP",
+    "id": "P-n76-k4",
+    "group": "CVRP-S",
+    "n_customers": 75,
+    "path": "instances/CVRP/P-n76-k4.csv",
+    "sha256": "744803e32b537f33dd2fb4d1299c8e898232fc56c0eded070d3159321e4fdd72"
+  },
+  {
+    "problem": "CVRP",
+    "id": "P-n76-k5",
+    "group": "CVRP-S",
+    "n_customers": 75,
+    "path": "instances/CVRP/P-n76-k5.csv",
+    "sha256": "eb7203d58be16fd1fd5dc3bc5c257b8dbed1bfd4f20e8c135ec8bdec8b89eddf"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n101-k25",
+    "group": "CVRP-M1",
+    "n_customers": 100,
+    "path": "instances/CVRP/X-n101-k25.csv",
+    "sha256": "a59b07c67b106e87c4dd6ec071959793572d81b84663d863797d2ee4fa72d03e"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n106-k14",
+    "group": "CVRP-M1",
+    "n_customers": 105,
+    "path": "instances/CVRP/X-n106-k14.csv",
+    "sha256": "7f0a0b5971d338c5eec846b529a6c2659c35d7eb7ef6238065f4f764c3c9c506"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n110-k13",
+    "group": "CVRP-M1",
+    "n_customers": 109,
+    "path": "instances/CVRP/X-n110-k13.csv",
+    "sha256": "b572caaaee2d30bbf7ea6b0b29f1c434fee47f2f96cf024a6d196d1b53aff061"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n115-k10",
+    "group": "CVRP-M1",
+    "n_customers": 114,
+    "path": "instances/CVRP/X-n115-k10.csv",
+    "sha256": "e71fd703df9f0076e2976938ea9c6140bef73e4ec82be9b68c14a5d98b1a2c3d"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n120-k6",
+    "group": "CVRP-M1",
+    "n_customers": 119,
+    "path": "instances/CVRP/X-n120-k6.csv",
+    "sha256": "2fec472fb50a816bbf659fc005a6bd159c5fe373600c8d8bc9d4c0aeb1357aac"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n125-k30",
+    "group": "CVRP-M1",
+    "n_customers": 124,
+    "path": "instances/CVRP/X-n125-k30.csv",
+    "sha256": "02cdd694a2e4e678fe9b84f62d6af1ec9e8494f25e391229fe04dbec64375afd"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n129-k18",
+    "group": "CVRP-M1",
+    "n_customers": 128,
+    "path": "instances/CVRP/X-n129-k18.csv",
+    "sha256": "b4ccb9cd77f9e7f0e0f026b1d9722c075fdd7d3924e628c2f301336ef7c88f2a"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n134-k13",
+    "group": "CVRP-M1",
+    "n_customers": 133,
+    "path": "instances/CVRP/X-n134-k13.csv",
+    "sha256": "cf71bf0e3a5e4030387f887eac1dc49a85ceda4626b2b8031ae2f438dd238dac"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n139-k10",
+    "group": "CVRP-M1",
+    "n_customers": 138,
+    "path": "instances/CVRP/X-n139-k10.csv",
+    "sha256": "534dee58af08bf910211cf481b21651e72dbc9d0da1aa4b03dec7f9ef65929e4"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n143-k7",
+    "group": "CVRP-M1",
+    "n_customers": 142,
+    "path": "instances/CVRP/X-n143-k7.csv",
+    "sha256": "63170e8781595dec92ee08a2436d7d23cddd2a10a4ea24280ce68c76fe174bb3"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n148-k46",
+    "group": "CVRP-M1",
+    "n_customers": 147,
+    "path": "instances/CVRP/X-n148-k46.csv",
+    "sha256": "199c2cec3149b3ff1a371074afa7c058378044f14df62009f34febb368d5f33c"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n153-k22",
+    "group": "CVRP-M1",
+    "n_customers": 152,
+    "path": "instances/CVRP/X-n153-k22.csv",
+    "sha256": "fc19d2a69e96a8d390459feec51c750491240ba5f2c1aacf6dfd6bc1c05107aa"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n157-k13",
+    "group": "CVRP-M1",
+    "n_customers": 156,
+    "path": "instances/CVRP/X-n157-k13.csv",
+    "sha256": "3d62e1cfdcb5aec9992cd1d2d29275f8053a01f6c496f8fdf0f6b9a05cffade4"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n162-k11",
+    "group": "CVRP-M1",
+    "n_customers": 161,
+    "path": "instances/CVRP/X-n162-k11.csv",
+    "sha256": "74b5ca61d5bf8cfce611cf723e43041a662ffed7d275bb287132964d9a179025"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n167-k10",
+    "group": "CVRP-M1",
+    "n_customers": 166,
+    "path": "instances/CVRP/X-n167-k10.csv",
+    "sha256": "ab8114d03b6a2dd0c7d59f3136ed00cef52d726bb86a17d6c008395f6e51cac2"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n172-k51",
+    "group": "CVRP-M1",
+    "n_customers": 171,
+    "path": "instances/CVRP/X-n172-k51.csv",
+    "sha256": "e2f9a797dec9901e6ebe516b4360afee2d7df5ede666560cd5b8c22b4f16ccf2"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n176-k26",
+    "group": "CVRP-M1",
+    "n_customers": 175,
+    "path": "instances/CVRP/X-n176-k26.csv",
+    "sha256": "989e72dd8b7dbb86526d2d66b92d10306bdbc15f34b01cf5c5a59b1db64bac80"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n181-k23",
+    "group": "CVRP-M1",
+    "n_customers": 180,
+    "path": "instances/CVRP/X-n181-k23.csv",
+    "sha256": "8690ee7e4ce0f13b0b5ef8379227a6bf8444cb556f176576ea35dffb9bc29af7"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n186-k15",
+    "group": "CVRP-M1",
+    "n_customers": 185,
+    "path": "instances/CVRP/X-n186-k15.csv",
+    "sha256": "98363c721b2ed06a011b373309dba102d45bbe4684499aa1684fe0ecd5ffce69"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n190-k8",
+    "group": "CVRP-M1",
+    "n_customers": 189,
+    "path": "instances/CVRP/X-n190-k8.csv",
+    "sha256": "061ad85bb7a531c92a03c164ec298bbb46dc13a20a9b6ac7859b0eb6bb5fa410"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n195-k51",
+    "group": "CVRP-M1",
+    "n_customers": 194,
+    "path": "instances/CVRP/X-n195-k51.csv",
+    "sha256": "d39f07b9311ccdfe2cfb8a0bfd53481fe88e2dc6eceea7d60d06e3aac3fa36af"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n200-k36",
+    "group": "CVRP-M1",
+    "n_customers": 199,
+    "path": "instances/CVRP/X-n200-k36.csv",
+    "sha256": "6ea6fa6f3b7e66b3c9515be76b32fbe9c54e2faedb75647fa0ea0c021b0474e7"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n204-k19",
+    "group": "CVRP-M2",
+    "n_customers": 203,
+    "path": "instances/CVRP/X-n204-k19.csv",
+    "sha256": "f21612efeaedef9bdf47cf78b702444a82fe3b4df98d55d5fd547e328c0dfc95"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n209-k16",
+    "group": "CVRP-M2",
+    "n_customers": 208,
+    "path": "instances/CVRP/X-n209-k16.csv",
+    "sha256": "e3118b31ca47c2e55920ad45a37a5ffa57255e17f61e2e90396c1a065b3f65f9"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n214-k11",
+    "group": "CVRP-M2",
+    "n_customers": 213,
+    "path": "instances/CVRP/X-n214-k11.csv",
+    "sha256": "a01666c8ee2048d917969df639de2c8e8a831224d5e3f831f1bc479c07de6ba0"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n219-k73",
+    "group": "CVRP-M2",
+    "n_customers": 218,
+    "path": "instances/CVRP/X-n219-k73.csv",
+    "sha256": "fc2dde4a8eb0ad543644b5b7c1f5b4546ea24b0eafda02477382d6345f053a60"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n223-k34",
+    "group": "CVRP-M2",
+    "n_customers": 222,
+    "path": "instances/CVRP/X-n223-k34.csv",
+    "sha256": "b26f9589a086f9831b81eace79815284f20009a2ea57defa51441bb791a18a18"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n228-k23",
+    "group": "CVRP-M2",
+    "n_customers": 227,
+    "path": "instances/CVRP/X-n228-k23.csv",
+    "sha256": "e76a58f092ef9e696afee8cd5c108722929d6dc3532a530b5e2fc9b9fb512cd9"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n233-k16",
+    "group": "CVRP-M2",
+    "n_customers": 232,
+    "path": "instances/CVRP/X-n233-k16.csv",
+    "sha256": "e939b76a905e5f1d0b73dbcac7e78ab294d5aaf814a1fce4cc0ddcec775268b5"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n237-k14",
+    "group": "CVRP-M2",
+    "n_customers": 236,
+    "path": "instances/CVRP/X-n237-k14.csv",
+    "sha256": "c972ee11e238f377e911ee8c06ffa394d9c082ec53d662223c3860a1e877b9ec"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n242-k48",
+    "group": "CVRP-M2",
+    "n_customers": 241,
+    "path": "instances/CVRP/X-n242-k48.csv",
+    "sha256": "95f0b8ec0fa4489342f03206570c4dab447d60475016e05e830d047834272505"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n247-k50",
+    "group": "CVRP-M2",
+    "n_customers": 246,
+    "path": "instances/CVRP/X-n247-k50.csv",
+    "sha256": "d05c242b24c9449828acca89f49b5e8f497da0b9de5039128d5670a9f38148d5"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n251-k28",
+    "group": "CVRP-M2",
+    "n_customers": 250,
+    "path": "instances/CVRP/X-n251-k28.csv",
+    "sha256": "e987a284ab035410994b0b805eb15b85c2ac2ac233dd4eceda88e980487eb8ef"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n256-k16",
+    "group": "CVRP-M2",
+    "n_customers": 255,
+    "path": "instances/CVRP/X-n256-k16.csv",
+    "sha256": "2ca7667575cccf476528b56a199b0b5aa520698af85d3f16551c6f2b17812a16"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n261-k13",
+    "group": "CVRP-M2",
+    "n_customers": 260,
+    "path": "instances/CVRP/X-n261-k13.csv",
+    "sha256": "7a15b9eb0c9cb22fb6838e29f47b4cae61f31d5241f8d63fba5c5847528647f3"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n266-k58",
+    "group": "CVRP-M2",
+    "n_customers": 265,
+    "path": "instances/CVRP/X-n266-k58.csv",
+    "sha256": "16a3d491ae15f3f5cb8c42af39a6173d101c6e40751bd5572a98ad156508e32b"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n270-k35",
+    "group": "CVRP-M2",
+    "n_customers": 269,
+    "path": "instances/CVRP/X-n270-k35.csv",
+    "sha256": "18d2924d67df49b3599b61885b0521cedd2d9ab95ce0ec6d42b69b01511d6a4f"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n275-k28",
+    "group": "CVRP-M2",
+    "n_customers": 274,
+    "path": "instances/CVRP/X-n275-k28.csv",
+    "sha256": "a5461bd7eb070d46845100661544978cb6e80dfb3d6aefac02352e98162744c1"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n280-k17",
+    "group": "CVRP-M2",
+    "n_customers": 279,
+    "path": "instances/CVRP/X-n280-k17.csv",
+    "sha256": "ed3cfefe10fd19156c168deec091e059e36f4d219da9aaca5cc41cb697551adf"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n284-k15",
+    "group": "CVRP-M2",
+    "n_customers": 283,
+    "path": "instances/CVRP/X-n284-k15.csv",
+    "sha256": "1efcf0ee6e5d30ef414f7a6fedac977a93347dad69f5de42a9b39331e83e3a89"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n289-k60",
+    "group": "CVRP-M2",
+    "n_customers": 288,
+    "path": "instances/CVRP/X-n289-k60.csv",
+    "sha256": "f6ffa562175f3dc5fcc47993f749e590410d86bbfe0a533d8d7eb58dd4f4b11e"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n294-k50",
+    "group": "CVRP-M2",
+    "n_customers": 293,
+    "path": "instances/CVRP/X-n294-k50.csv",
+    "sha256": "d97db55cb637b054b38bb5e0ba8690c6e017723fbddf8b5113a06d644b15f87f"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n298-k31",
+    "group": "CVRP-M2",
+    "n_customers": 297,
+    "path": "instances/CVRP/X-n298-k31.csv",
+    "sha256": "13bd4be6c098962ef168bfc78a39824658ea4d25b9941ac1a226de514cea896c"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n303-k21",
+    "group": "CVRP-M2",
+    "n_customers": 302,
+    "path": "instances/CVRP/X-n303-k21.csv",
+    "sha256": "2a078494893ab87aad532790f10d443ed4df37e5746b3bbe897fe4aa72a14802"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n308-k13",
+    "group": "CVRP-M2",
+    "n_customers": 307,
+    "path": "instances/CVRP/X-n308-k13.csv",
+    "sha256": "37f9e60fe1be15fe86c132ba00a8bf5bfdea612b9f979032a55c06e3319aeacb"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n313-k71",
+    "group": "CVRP-M2",
+    "n_customers": 312,
+    "path": "instances/CVRP/X-n313-k71.csv",
+    "sha256": "c5a01253dde8abfec49bf1f71a85289cdf91dae70c44edbf6d9dc800e52f75f7"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n317-k53",
+    "group": "CVRP-M2",
+    "n_customers": 316,
+    "path": "instances/CVRP/X-n317-k53.csv",
+    "sha256": "09da5917a388734f2ce64f0c811ba38a8dc3cb7f59341ad1fce8ee92d340d6ce"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n322-k28",
+    "group": "CVRP-M2",
+    "n_customers": 321,
+    "path": "instances/CVRP/X-n322-k28.csv",
+    "sha256": "948d444da98a4c36bfd577d68eaba32f1221d1baa5959e3636fce90ed19ab335"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n327-k20",
+    "group": "CVRP-M2",
+    "n_customers": 326,
+    "path": "instances/CVRP/X-n327-k20.csv",
+    "sha256": "6c607fa4c0ea38fb6b9ebf871c99bde979beb513d9a1e89209aa8b134c6abbf0"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n331-k15",
+    "group": "CVRP-M2",
+    "n_customers": 330,
+    "path": "instances/CVRP/X-n331-k15.csv",
+    "sha256": "1bcb91140179659b54669ccbb44605fdc35bc97104b3fb88604c77b830e39e97"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n336-k84",
+    "group": "CVRP-M2",
+    "n_customers": 335,
+    "path": "instances/CVRP/X-n336-k84.csv",
+    "sha256": "95e7e6783380b449f754c5d63f1f35be951d7367cccaa248ad5c505830af84a7"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n344-k43",
+    "group": "CVRP-M2",
+    "n_customers": 343,
+    "path": "instances/CVRP/X-n344-k43.csv",
+    "sha256": "245522c5ef5fcf257395c07c583b13e735123b6d43c4e846ca05eaf1245cdaa1"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n351-k40",
+    "group": "CVRP-L",
+    "n_customers": 350,
+    "path": "instances/CVRP/X-n351-k40.csv",
+    "sha256": "6c3c6b077cfafbe20143dc9e78f697ee75c4fbf03f622daa8ee9a74de4498844"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n359-k29",
+    "group": "CVRP-L",
+    "n_customers": 358,
+    "path": "instances/CVRP/X-n359-k29.csv",
+    "sha256": "5ae5ee8e71877119fabe0ff5139113ea9a903138a4da3d9c274eb2b3a0db9317"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n367-k17",
+    "group": "CVRP-L",
+    "n_customers": 366,
+    "path": "instances/CVRP/X-n367-k17.csv",
+    "sha256": "9fa1400c349030823f74a500a621412e0aeb4261a4a636b8f291c5d5f9fac745"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n376-k94",
+    "group": "CVRP-L",
+    "n_customers": 375,
+    "path": "instances/CVRP/X-n376-k94.csv",
+    "sha256": "6a93f19f820d15f335a70b45c769c71309eaf2d7e170dd121957cec3fda6f1c8"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n384-k52",
+    "group": "CVRP-L",
+    "n_customers": 383,
+    "path": "instances/CVRP/X-n384-k52.csv",
+    "sha256": "9ca79dae170cc2d58ff107e57adc1add26fa56bbddd1895beb8dd04a8769d6c4"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n393-k38",
+    "group": "CVRP-L",
+    "n_customers": 392,
+    "path": "instances/CVRP/X-n393-k38.csv",
+    "sha256": "3fa402e9a1316dc6efe3b763ae442129a430989b57874cd37049adfdca0f5fc7"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n401-k29",
+    "group": "CVRP-L",
+    "n_customers": 400,
+    "path": "instances/CVRP/X-n401-k29.csv",
+    "sha256": "3f179822ff626498f6988bf6866c829795b6617be9743857e733ac461b34681d"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n411-k19",
+    "group": "CVRP-L",
+    "n_customers": 410,
+    "path": "instances/CVRP/X-n411-k19.csv",
+    "sha256": "bf98f1f7f4340d5fa2bbc42868ff2c4521eb293d20e53a6bcdb27d2fd55125eb"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n420-k130",
+    "group": "CVRP-L",
+    "n_customers": 419,
+    "path": "instances/CVRP/X-n420-k130.csv",
+    "sha256": "7a655966714ddc8ab640e78b0df822212740504e907d5648bb725f39b7765034"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n429-k61",
+    "group": "CVRP-L",
+    "n_customers": 428,
+    "path": "instances/CVRP/X-n429-k61.csv",
+    "sha256": "d9bd29162430112b6ab797c9c420d1be56dbdf8bfd166006772652b477ac2000"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n439-k37",
+    "group": "CVRP-L",
+    "n_customers": 438,
+    "path": "instances/CVRP/X-n439-k37.csv",
+    "sha256": "f73b46c8bcefc8a5534ab629f790bbec7753086d8cd30aa2aa8ec632ae88e20f"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n449-k29",
+    "group": "CVRP-L",
+    "n_customers": 448,
+    "path": "instances/CVRP/X-n449-k29.csv",
+    "sha256": "aac90d5b4cfb2f502c5bd5ad860ef01a45e6659c0c29a2dc426abe3b20af9bf2"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n459-k26",
+    "group": "CVRP-L",
+    "n_customers": 458,
+    "path": "instances/CVRP/X-n459-k26.csv",
+    "sha256": "2480e630bdd094ba410c8adfa621310beb1344afe6694157b23030f087b63b4c"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n469-k138",
+    "group": "CVRP-L",
+    "n_customers": 468,
+    "path": "instances/CVRP/X-n469-k138.csv",
+    "sha256": "0ae16a70365586c73232e1c4b5d86a81f15c32ef23ea552d89127277c73a834f"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n480-k70",
+    "group": "CVRP-L",
+    "n_customers": 479,
+    "path": "instances/CVRP/X-n480-k70.csv",
+    "sha256": "8d88d3c8fbf0706f851730b1710afd6d4edb2c50b076ff17422785b5d9e77016"
+  },
+  {
+    "problem": "CVRP",
+    "id": "X-n491-k59",
+    "group": "CVRP-L",
+    "n_customers": 490,
+    "path": "instances/CVRP/X-n491-k59.csv",
+    "sha256": "8d1dfd8acc226c977b15f912b4ba9ccb931a5b3eb9fc028e9b89cbba901f4d97"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "C101",
+    "group": "C",
+    "n_customers": 100,
+    "path": "instances/VRPTW/C101.csv",
+    "sha256": "651da97aca64e942c41de05e06a0d38f48dfec388f64bb59addd9df51dc7ace0"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "C102",
+    "group": "C",
+    "n_customers": 100,
+    "path": "instances/VRPTW/C102.csv",
+    "sha256": "a3f337f82f8521f62059d94c26c60303d4245af964ffcfddd4726a06bbd35493"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "C103",
+    "group": "C",
+    "n_customers": 100,
+    "path": "instances/VRPTW/C103.csv",
+    "sha256": "1b4413a16c7c0427812779b75aebe4ce1b8814d7e39d7f36415e9f4f9c356bb0"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "C104",
+    "group": "C",
+    "n_customers": 100,
+    "path": "instances/VRPTW/C104.csv",
+    "sha256": "c494549488441185e91db805335297f72275a3888a641987c04aef7dd8cb83d6"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "C105",
+    "group": "C",
+    "n_customers": 100,
+    "path": "instances/VRPTW/C105.csv",
+    "sha256": "e4498e55681750622aba70f590ba646c30439e449604b9ce3ca522f612433656"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "C106",
+    "group": "C",
+    "n_customers": 100,
+    "path": "instances/VRPTW/C106.csv",
+    "sha256": "9a966ce42c84e0776a7a308d800cba80718e716ac80ca7834517da332f7e8292"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "C107",
+    "group": "C",
+    "n_customers": 100,
+    "path": "instances/VRPTW/C107.csv",
+    "sha256": "108970055d08eabe47015222ca53f46e542ec069ca127940aa66649a9cd0dd0a"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "C108",
+    "group": "C",
+    "n_customers": 100,
+    "path": "instances/VRPTW/C108.csv",
+    "sha256": "24b5b4cddd7c5680e8cf7a5853f62ab2f3ff8ab70b17739eefdb02e4ff67cbab"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "C109",
+    "group": "C",
+    "n_customers": 100,
+    "path": "instances/VRPTW/C109.csv",
+    "sha256": "de8e56e56d4b49c70516c6b81066a6d65edf3c33e362f1a3bde8f10000bdeb7c"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "C201",
+    "group": "C",
+    "n_customers": 100,
+    "path": "instances/VRPTW/C201.csv",
+    "sha256": "517bafa77115993955ae612cdcc5d861c43a7863c6d3aa03a02e8c47abebc605"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "C202",
+    "group": "C",
+    "n_customers": 100,
+    "path": "instances/VRPTW/C202.csv",
+    "sha256": "f3b6a7d7597de7479905d6223ecdd5f762fde0c7eb77713498cac0c738e47f26"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "C203",
+    "group": "C",
+    "n_customers": 100,
+    "path": "instances/VRPTW/C203.csv",
+    "sha256": "5e49d38f0996a580407ce67250971ed318aa4b474db1cc7461078a7876d95988"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "C204",
+    "group": "C",
+    "n_customers": 100,
+    "path": "instances/VRPTW/C204.csv",
+    "sha256": "5f71c955127cdb4cc8053d960ac7e5e30c88c6df1fc9a099f84c15efcd9f6158"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "C205",
+    "group": "C",
+    "n_customers": 100,
+    "path": "instances/VRPTW/C205.csv",
+    "sha256": "a9187259607f4c0d26e6e0dee1d9f912792eae8c179cf4ebf6d21230bf2bac2c"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "C206",
+    "group": "C",
+    "n_customers": 100,
+    "path": "instances/VRPTW/C206.csv",
+    "sha256": "9e81eb0a530b7403ff946c204239b1827bc2b81d5aadf4e1252c5b05b79d0a58"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "C207",
+    "group": "C",
+    "n_customers": 100,
+    "path": "instances/VRPTW/C207.csv",
+    "sha256": "0119d7719bb869b00c44702161bec1c1a39d87b5c493227898116ae6ef87150e"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "C208",
+    "group": "C",
+    "n_customers": 100,
+    "path": "instances/VRPTW/C208.csv",
+    "sha256": "755edaa1cd7ac77262290b627a17da5a04d41cee978abac199a4ff9e20bcee69"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R101",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R101.csv",
+    "sha256": "cde6b3532b7fe37743c7bdf6045d0024e21e76a08f7495f835cf730442617d80"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R102",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R102.csv",
+    "sha256": "3397aa2f42b212e501fe1dfcc8f58e387fde66bc64416881ccac72f3f98830bf"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R103",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R103.csv",
+    "sha256": "55daf823801571e7e76da4c0fd0498c1342d8a57fc4b1e3c173e19b5252b7f73"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R104",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R104.csv",
+    "sha256": "e68fbc259610f1f04f6dfe15b4b0db448063c5c91d15a614c775479396b4faba"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R105",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R105.csv",
+    "sha256": "47c8b420833a3d7b1441017522e6a8e960e31a6572e3fc6dabc70c9501ce8733"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R106",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R106.csv",
+    "sha256": "0f55800908885a5200c2a739ac0d1d638b036be9abf7374e1ae320605ecb4123"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R107",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R107.csv",
+    "sha256": "e039b5017d47c42889fe4b814efb73884549e10f6b7c450964fdd767eedc4dc1"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R108",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R108.csv",
+    "sha256": "865add203c92bcd1d87e17d444b9b9f291f69b1cac6ecb148f99daa4e808199c"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R109",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R109.csv",
+    "sha256": "bb18302ddbfae646a5b8ab44d262bb8896ded91adfbb5bd3034a0e15ba25331f"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R110",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R110.csv",
+    "sha256": "2ce97d8203a0de0cbed71307d8b04f768ad037cb1e3ff3984e9ee98e31d2f3a4"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R111",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R111.csv",
+    "sha256": "102028fb9e97615763e7819650ce9ebf831aa3e751e82bbed2ae88a1365be927"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R112",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R112.csv",
+    "sha256": "9a85479d739496cff2b94bb8b2b34c42a85ddadf4c5ddad1b3c8a14e96cb721d"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R201",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R201.csv",
+    "sha256": "b7605388ea10e1adfec72d85eb8a6e30aad06e1228db2e61ce3419267a9b83f7"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R202",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R202.csv",
+    "sha256": "739ea43ec6ad395ec15b5d3a69be5306e05db03148c9d64a86ee69761f71662a"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R203",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R203.csv",
+    "sha256": "0b113be9a54fe6eb83c9b9a71dc3d3e0aad8b3293a8753aca0d2c5bcfd082256"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R204",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R204.csv",
+    "sha256": "347e38112eecc204444694e89018be6b38032a1459f1d2deffbb2c6721482b60"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R205",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R205.csv",
+    "sha256": "eedbfa36c260d1ca9ccec7c614fc5196d9a040cb06714f6986f96cf613a4d36d"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R206",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R206.csv",
+    "sha256": "7d29d50d76b1084072fd53c22b55307eb0c06e89c2ee180fd26e9b82620137de"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R207",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R207.csv",
+    "sha256": "9266d4c7734fe12ecd75491a20da35f9e0caf7b04344dec2645a8a5b422cac3c"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R208",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R208.csv",
+    "sha256": "a7ba687ac1a596d61f3f36a6e57ee1c11422c10aa2c95b1df890a2fabfad05cf"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R209",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R209.csv",
+    "sha256": "975d68b81fc5cba33ebf70801f2e378640a77dcaba31661e5b3e4c219828b259"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R210",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R210.csv",
+    "sha256": "b5bce1cd1321d9bb1cd3bea9a5cd7bf6ae871da82ec0dc605308cbbc50b93493"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "R211",
+    "group": "R",
+    "n_customers": 100,
+    "path": "instances/VRPTW/R211.csv",
+    "sha256": "b2844b9ec449674ac93cecda43af3a24128fe364fb767d7f2b063a113d13fbab"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "RC101",
+    "group": "RC",
+    "n_customers": 100,
+    "path": "instances/VRPTW/RC101.csv",
+    "sha256": "080e766da60fd6425c3b641d060ab0b4605c009f1912f7379e2c9fda5988b786"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "RC102",
+    "group": "RC",
+    "n_customers": 100,
+    "path": "instances/VRPTW/RC102.csv",
+    "sha256": "759a1ab3a9e6a7056a8f4148e8dc568b1c7c17ef6eb4813154ebe38f681e9ec5"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "RC103",
+    "group": "RC",
+    "n_customers": 100,
+    "path": "instances/VRPTW/RC103.csv",
+    "sha256": "3ca6efc4c7bb4c192f2781ca30b913de25807c8c9fd801ed0d12fbd00a3ee098"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "RC104",
+    "group": "RC",
+    "n_customers": 100,
+    "path": "instances/VRPTW/RC104.csv",
+    "sha256": "e9cf29ff51b12312a261edd28aaaa0af997ea530ec3c7607d984dbfc3995c59c"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "RC105",
+    "group": "RC",
+    "n_customers": 100,
+    "path": "instances/VRPTW/RC105.csv",
+    "sha256": "1c44290e766bfc4d949e9989cef1758ca3f7f7d238bdadf3e565303b40d039e7"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "RC106",
+    "group": "RC",
+    "n_customers": 100,
+    "path": "instances/VRPTW/RC106.csv",
+    "sha256": "0ed9ee46bce03ed97fe3855c51bf1c87a628c3eb1f2531b51ea5edd9e7ada5b9"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "RC107",
+    "group": "RC",
+    "n_customers": 100,
+    "path": "instances/VRPTW/RC107.csv",
+    "sha256": "fa6b04d687c981b38e4f968e1758b5b1ffde723681df737ec27824ae1bd40e13"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "RC108",
+    "group": "RC",
+    "n_customers": 100,
+    "path": "instances/VRPTW/RC108.csv",
+    "sha256": "0ff48a9367e25df8d9582a3ee927643169d5733b6f63bc594ec1f9fa86aa82cf"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "RC201",
+    "group": "RC",
+    "n_customers": 100,
+    "path": "instances/VRPTW/RC201.csv",
+    "sha256": "8c5d54eef389ee5010053697926f66afd0b6774a704c1099e07db93d4ce64ad5"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "RC202",
+    "group": "RC",
+    "n_customers": 100,
+    "path": "instances/VRPTW/RC202.csv",
+    "sha256": "ba3ceec4b9722bf911c676d952bc85a8f4d6f2bd2f8adcea44f7795c261837cb"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "RC203",
+    "group": "RC",
+    "n_customers": 100,
+    "path": "instances/VRPTW/RC203.csv",
+    "sha256": "b59f964156c0114301d2c0f5a42e5eed1d3560aed84701c03484ca3e1a573ce2"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "RC204",
+    "group": "RC",
+    "n_customers": 100,
+    "path": "instances/VRPTW/RC204.csv",
+    "sha256": "2739c600d32d20e351b2ea4799642858f90d5476d86d88aefd86ff762f96db35"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "RC205",
+    "group": "RC",
+    "n_customers": 100,
+    "path": "instances/VRPTW/RC205.csv",
+    "sha256": "ba006dd198ccb67e0f10792d57d02701c4df893754d691f8e56c9b7e080ed422"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "RC206",
+    "group": "RC",
+    "n_customers": 100,
+    "path": "instances/VRPTW/RC206.csv",
+    "sha256": "0c008b565d1a94f91845525ac6bcb9bc459e3033020e353774f7da9c59556072"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "RC207",
+    "group": "RC",
+    "n_customers": 100,
+    "path": "instances/VRPTW/RC207.csv",
+    "sha256": "6b7f0bd341ea44c1df4a577b97ebc77afb1131a5b87277b2261ece4868214884"
+  },
+  {
+    "problem": "VRPTW",
+    "id": "RC208",
+    "group": "RC",
+    "n_customers": 100,
+    "path": "instances/VRPTW/RC208.csv",
+    "sha256": "3d72c2428d73b0dcaf6b091a0acc4f7fa5568a33729016c81a3c16ba10cdcafc"
+  }
+]

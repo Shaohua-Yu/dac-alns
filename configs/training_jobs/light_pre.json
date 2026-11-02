@@ -1,0 +1,8 @@
+{
+  "job_id": "light_pre",
+  "mode": "light",
+  "problem": "VRPTW",
+  "method": "DAC-Pre",
+  "training_seed": 424242,
+  "slot": 23
+}

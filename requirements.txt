@@ -1,0 +1,8 @@
+# Main solver dependencies; Python 3.10.
+numpy==2.2.6
+torch==2.7.1
+torch-geometric==2.8.0.post1
+matplotlib==3.10.9
+numba==0.61.2
+# Statistical reference scripts also use scipy.
+scipy==1.15.3

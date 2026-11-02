@@ -1,0 +1,2 @@
+# Keep the exact source and result bytes during checkout.
+* -text

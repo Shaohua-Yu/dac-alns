@@ -1,0 +1,17 @@
+External baseline source references (not bundled)
+
+DR-ALNS
+  https://github.com/RobbertReijnen/DR-ALNS
+  Recorded commit: 144e48f6912ad9967968561b6b0ce90cedcc14aa
+
+PPO-ALNS
+  https://github.com/Kikujjy/ppo-alns
+  Recorded commit: 64c0ba11902c7db805f64175b2db2dcfb58df7ad
+
+The external adapters in reference_code/ retain the original experiment path
+conventions. Upstream implementations, their dependencies and checkpoints must
+be supplied separately to execute them. Upstream licensing applies separately.
+
+Test benchmarks: Augerat A/B/P and CVRPLIB X for CVRP; Solomon 100-customer
+instances for VRPTW. The packaged CSV files are the processed test inputs used
+in the experiments; data hashes are in configs/instances.json.
