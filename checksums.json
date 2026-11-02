@@ -967,8 +967,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 2385,
-      "sha256": "e253baf2e10e28d065dd70dbf9f933173f912db6b728520b1a533066488ee816"
+      "bytes": 5111,
+      "sha256": "82893d39e033777e2e88518a33ea3201c9cb1a1a396ae8dfc230c562e5fcf898"
     },
     {
       "path": "reference_code/analyze_expansion_20261012.py",
